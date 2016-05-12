@@ -66,8 +66,11 @@ int main(int argc, char** argv) {
     TS.trait = PFSPconvert;
 
 
+    // Generate initial solution
     Permutation init(num_tasks);
     std::iota(init.begin(), init.end(), 1);
+
+    // random engine use to shuffle init solution
     std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 
     //MH::Trajectory::search(Tinstance, TS, init);
