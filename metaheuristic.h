@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <deque>
+#include <valarray>
 #include <unordered_set>
 
 // Declarations
@@ -139,6 +140,7 @@ namespace MetaHeuristics {
     }
 
     namespace Evolutionary {
+
         class DE_Random {};
         class DE_Best {};
         class DE_CurrentToRandom {};
@@ -149,7 +151,7 @@ namespace MetaHeuristics {
 
         // EncodingType of DE is restrict to vector of real numbers (float | double | long double)
         template <typename SelectionStrategy, typename CrossoverStrategy>
-        class DifferentialEvolution {
+        struct DifferentialEvolution {
             double crossover_rate;
             double current_factor;
             double scaling_factor;
@@ -161,7 +163,6 @@ namespace MetaHeuristics {
         template <typename EncodingType>
         struct InstanceType {
             uint64_t generation_limit;
-            std::vector<EncodingType> (*neighbors)(EncodingType &);
             void *inf;
             double (*evaluate)(EncodingType &, void *);
         };
@@ -170,20 +171,36 @@ namespace MetaHeuristics {
         template <typename SelectionStrategy, typename CrossoverStrategy>
         using DE = DifferentialEvolution<SelectionStrategy, CrossoverStrategy>;
 
+        // Function definitions
+        template <typename FPprecision, typename SelectionStrategy, typename CrossoverStrategy>
+        SolutionType<std::vector<FPprecision>> evolution(InstanceType<std::vector<FPprecision>> &,
+                                             DifferentialEvolution<SelectionStrategy, CrossoverStrategy> &,
+                                             std::vector<std::vector<FPprecision>> &);
         template <typename EncodingType, typename AlgorithmType>
         SolutionType<EncodingType> evolution(InstanceType<EncodingType> &,
                                              AlgorithmType &,
                                              std::vector<EncodingType> &);
         template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
         void initialize(InstanceType<EncodingType> &,
-                DE<SelectionStrategy, CrossoverStrategy> &,
-                std::vector<EncodingType> &);
+                        DE<SelectionStrategy, CrossoverStrategy> &,
+                        std::vector<EncodingType> &);
         template <typename EncodingType>
-        std::vector<SolutionType<EncodingType>> initial_popultion(InstanceType<EncodingType> &,
-                                                                  std::vector<EncodingType> &init);
+        std::vector<SolutionType<EncodingType>> initialize_popultion(InstanceType<EncodingType> &,
+                                                                     std::vector<EncodingType> &);
         template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
-        std::vector<SolutionType<EncodingType>> initial_popultion(InstanceType<EncodingType> &,
-                                                                  std::vector<EncodingType> &init);
+        std::vector<SolutionType<EncodingType>> generate(InstanceType<EncodingType> &,
+                                                         std::vector<SolutionType<EncodingType>> &,
+                                                         DE<SelectionStrategy, CrossoverStrategy> &);
+
+        template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy> 
+        EncodingType DE_mate(EncodingType &,
+                             std::vector<SolutionType<EncodingType>> &,
+                             DE<SelectionStrategy, CrossoverStrategy> &);
+        template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
+        EncodingType DE_mate_select(std::vector<EncodingType> &select_pool,
+                                    std::vector<SolutionType<EncodingType>> &population,
+                                    DE<SelectionStrategy, CrossoverStrategy> &,
+                                    DE_Random &);
     }
 }
 
@@ -374,4 +391,106 @@ MH::Trajectory::select_SA(double temperature,
         }
     }
     return current;
+}
+
+
+template <typename EncodingType, typename AlgorithmType>
+MH::SolutionType<EncodingType>
+MH::Evolutionary::evolution(MH::Evolutionary::InstanceType<EncodingType> &instance,
+                            AlgorithmType &algorithm,
+                            std::vector<EncodingType> &init) {
+    MH::Evolutionary::initialize(instance, algorithm, init);
+    auto population = MH::Evolutionary::initialize_popultion(instance, init);
+    for(auto generation_count = 0UL;
+        generation_count < instance.generation_limit;
+        ++generation_count) {
+        population = MH::Evolutionary::generate(instance, population, algorithm);
+    }
+    auto min = *std::min(population.begin(), population.end());
+    std::cout << "Final value = " << min.score << std::endl;
+    return min;
+}
+
+// Since DE will convert vector to valarray as an underlying type for performance,
+// we need this wrapper to convert the initial population and restore the returned valarray
+template <typename FPprecision, typename SelectionStrategy, typename CrossoverStrategy>
+MH::SolutionType<std::vector<FPprecision>>
+MH::Evolutionary::evolution(InstanceType<std::vector<FPprecision>> &instance,
+                            DifferentialEvolution<SelectionStrategy, CrossoverStrategy> &de,
+                            std::vector<std::vector<FPprecision>> &init) {
+    // A new instance set to valarray type
+    auto Uinstance = MH::Evolutionary::InstanceType<std::valarray<FPprecision>>();
+    Uinstance.evaluate = instance.evaluate;
+    Uinstance.generation_limit = instance.generation_limit;
+    Uinstance.inf = instance.inf;
+    // convert real vector to valarray
+    std::vector<std::valarray<FPprecision>> valarray_init(init.size());
+    std::transform(init.begin(),
+                   init.end(),
+                   valarray_init.begin(),
+                   [&](auto &s) {
+                       return std::valarray<FPprecision>(s.data(), s.size());
+                   });
+    auto &result = MH::Evolutionary::evolution(Uinstance, de, valarray_init);
+    // convert vallarray back to real vector
+    std::vector<FPprecision> vec_result(result.encoding.begin(), result.encoding.end());
+    return MH::SolutionType<std::vector<FPprecision>>(vec_result, result.score);
+}
+
+template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
+inline void
+MH::Evolutionary::initialize(MH::Evolutionary::InstanceType<EncodingType> &,
+                             MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &,
+                             std::vector<EncodingType> &) {
+    std::cout << "Starting Differential Evolution ... " << std::endl;
+}
+
+
+template <typename EncodingType>
+std::vector<MH::SolutionType<EncodingType>>
+MH::Evolutionary::initialize_popultion(MH::Evolutionary::InstanceType<EncodingType> &instance,
+                                       std::vector<EncodingType> &init) {
+    std::vector<MH::SolutionType<EncodingType>> population;
+    std::transform(init.begin(),
+                   init.end(),
+                   population.begin(),
+                   [&](auto &s) {
+                       return MH::SolutionType<EncodingType>(s, instance.evaluate(s, instance.addinf));
+                   });
+    return population;
+}
+
+template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
+std::vector<MH::SolutionType<EncodingType>>
+MH::Evolutionary::generate(InstanceType<EncodingType> &instance,
+                           std::vector<SolutionType<EncodingType>> &population,
+                           MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &de) {
+    for(auto i = 0UL; i < population.szie(); ++i) {
+        auto &target_vec = population[i].encoding;
+        auto &trial_vec = MH::Evolutionary::DE_mate(instance, target_vec, population, de);
+        population[i] = MH::Evolutionary::env_select(instance, target_vec, trial_vec);
+    }
+}
+
+
+template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy> 
+EncodingType
+MH::Evolutionary::DE_mate(EncodingType &target_vec,
+                          std::vector<SolutionType<EncodingType>> &population,
+                          MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &de) {
+    std::vector<EncodingType> select_pool;
+    select_pool.push_back(target_vec);
+    auto &mutant_vec = MH::Evolutioanry::DE_mate_select(select_pool, population, de, de.selection_strategy);
+    mutant_vec += MH::Evolutionary::DE_mutation(select_pool, population, de.scaling_factor, de.num_of_diff_vectors);
+    auto &trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de.crossover_strategy);
+    return target_vec;
+}
+
+template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
+EncodingType
+MH::Evolutionary::DE_mate_select(std::vector<EncodingType> &select_pool,
+                                 std::vector<MH::SolutionType<EncodingType>> &population,
+                                 MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &,
+                                 MH::Evolutionary::DE_Random &) {
+
 }
