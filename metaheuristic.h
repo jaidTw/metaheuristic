@@ -230,24 +230,6 @@ MH::Trajectory::select(MH::Trajectory::InstanceType<EncodingType > &instance,
                        std::vector<MH::SolutionType<EncodingType>> &neighbors,
                        MH::Trajectory::TS<EncodingType, TraitType> &ts) {
     auto &min = neighbors.front();
-    /*
-    std::cout << "Listing neighbors " << std::endl;
-    for(auto &neighbor : neighbors) {
-        for(auto &num : neighbor.encoding) {
-            std::cout << static_cast<uint16_t>(num) << " ";
-        }
-        std::cout << "Score : " << neighbor.score << std::endl;
-    }
-    std::cout << "DONE " << std::endl;
-    std::cout << "Listing QUEUE " << std::endl;
-    for(auto &perm : ts.queue) {
-        for(auto &num : perm) {
-            std::cout << static_cast<uint16_t>(num) << " ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "DONE " << std::endl;
-    */
     for(auto &neighbor : neighbors) {
         if(std::find(ts.queue.begin(),
                      ts.queue.end(),
