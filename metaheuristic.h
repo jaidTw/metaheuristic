@@ -3,54 +3,54 @@
 #include <cstdint>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <algorithm>
 #include <chrono>
 #include <deque>
 #include <valarray>
-#include <unordered_set>
 
 // Declarations
-namespace MetaHeuristics {
+namespace MH {
 
-    // All algorithms will use SolutionType to store the solution encoding and evaluation result (score).
-    // Template parameter EncodingType is the type of the encoding suppose to use.
-    template <typename EncodingType>
-    struct SolutionType {
-        friend bool operator<(SolutionType<EncodingType> &a, SolutionType<EncodingType> &b) {
+    // All algorithms will use Solution to store the solution encoding and evaluation result (score).
+    // Template parameter Encoding is the type of the encoding suppose to use.
+    template <typename Encoding>
+    struct Solution {
+        friend bool operator<(Solution<Encoding> &a, Solution<Encoding> &b) {
             return a.score < b.score;
         }
         // Solution encoding
-        EncodingType encoding;
+        Encoding encoding;
         // Evaluation result
         double score;
         // Three types of constructor
-        SolutionType();
-        SolutionType(EncodingType &);
-        SolutionType(EncodingType &, double);
+        Solution();
+        Solution(Encoding &);
+        Solution(Encoding &, double);
     };
 
     namespace Trajectory {
 
         // A trajectory instance object specifies generation limit, neighborhood functions and evaluation function
         // there is also an optional "inf" field to provide additional information to evaluation function
-        template <typename EncodingType>
-        struct InstanceType {
+        template <typename Encoding>
+        struct Instance {
             uint64_t generation_limit;
             // user provide neighborhood generate function
             // aceept an encoding and return a vector of neighborhood encodings
-            std::vector<EncodingType> (*neighbors)(EncodingType &);
+            std::vector<Encoding> (*neighbors)(Encoding &);
             // optional information provide to evaluate
             void *inf;
             // evaluate function, accept an encoding and additional information from instance.inf as (void *)
             // return a real number which is suppose to be minimize.
-            double (*evaluate)(EncodingType &, void *);
+            double (*evaluate)(Encoding &, void *);
         };
 
 
-        template <typename II_StrategyType>
-        struct IterativeImprovement{
-            II_StrategyType strategy;
+        template <typename Strategy>
+        struct II{
+            Strategy strategy;
         };
 
         // These class is used as temeplate parameter for II
@@ -58,7 +58,7 @@ namespace MetaHeuristics {
         class II_FirstImproving {};
         class II_Stochastic {};
 
-        struct SimulatedAnnealing{
+        struct SA{
             double init_temperature;
             int64_t epoch_length;
             double (*cooling)(double);
@@ -66,77 +66,79 @@ namespace MetaHeuristics {
             int64_t epoch_count;
         };
 
-        template <typename EncodingType, typename TraitType>
-        struct TabuSearch{
+        template <typename Encoding, typename TraitType>
+        struct TS{
             int8_t length;
             // the trait function accept an encoding and transform it into traits to store in tabu list.
-            TraitType (*trait)(EncodingType&, void *);
+            TraitType (*trait)(Encoding&, void *);
             std::deque<TraitType> queue;
         };
 
         // Random search is aim to compare with others
-        struct RandomSearch{};
+        struct RS{};
+        struct BFS{};
+        struct DFS{};
 
         // aliases
-        template <typename StrategyType>
-        using II = IterativeImprovement<StrategyType>;
-        using SA = SimulatedAnnealing;
-        template <typename EncodingType, typename TraitType>
-        using TS = TabuSearch<EncodingType, TraitType>;
-        using RS = RandomSearch;
+        template <typename Strategy>
+        using IterativeImprovement = II<Strategy>;
+        using SimulatedAnnealing = SA;
+        template <typename Encoding, typename TraitType>
+        using TabuSearch = TS<Encoding, TraitType>;
+        using RandomSearch = RS;
 
         // Function declarations
-        template <typename EncodingType, typename AlgorithmType>
-        SolutionType<EncodingType> search(InstanceType<EncodingType> &,
+        template <typename Encoding, typename AlgorithmType>
+        Solution<Encoding> search(Instance<Encoding> &,
                                           AlgorithmType &,
-                                          EncodingType &);
-        template <typename EncodingType, typename StrategyType>
-        void initialize(InstanceType<EncodingType> &, II<StrategyType> &, EncodingType &);
-        template <typename EncodingType>
-        void initialize(InstanceType<EncodingType> &, SA &, EncodingType &);
-        template <typename EncodingType, typename TraitType>
-        void initialize(InstanceType<EncodingType> &, TS<EncodingType, TraitType> &, EncodingType &);
-        template <typename EncodingType>
-        void initialize(InstanceType<EncodingType> &, RS &, EncodingType &);
-        template <typename EncodingType, typename StrategyType>
-        SolutionType<EncodingType>& select(InstanceType<EncodingType> &,
-                                           SolutionType<EncodingType> &,
-                                           std::vector<SolutionType<EncodingType>> &,
-                                           II<StrategyType> &);
-        template <typename EncodingType>
-        SolutionType<EncodingType>& select(InstanceType<EncodingType> &,
-                                           SolutionType<EncodingType> &,
-                                           std::vector<SolutionType<EncodingType>> &,
-                                           SA &);
-        template <typename EncodingType, typename TraitType>
-        SolutionType<EncodingType>& select(InstanceType<EncodingType> &,
-                                           SolutionType<EncodingType> &,
-                                           std::vector<SolutionType<EncodingType>> &,
-                                           TS<EncodingType, TraitType> &);
-        template <typename EncodingType>
-        SolutionType<EncodingType>& select(InstanceType<EncodingType> &,
-                                           SolutionType<EncodingType> &,
-                                           std::vector<SolutionType<EncodingType>> &,
-                                           RS &);
-        template <typename EncodingType>
-        SolutionType<EncodingType>& select_II(InstanceType<EncodingType> &,
-                                           SolutionType<EncodingType> &,
-                                           std::vector<SolutionType<EncodingType>> &,
-                                           II_BestImproving &);
-        template <typename EncodingType>
-        SolutionType<EncodingType>& select_II(InstanceType<EncodingType> &,
-                                           SolutionType<EncodingType> &,
-                                           std::vector<SolutionType<EncodingType>> &,
-                                           II_FirstImproving &);
-        template <typename EncodingType>
-        SolutionType<EncodingType>& select_II(InstanceType<EncodingType> &,
-                                          SolutionType<EncodingType> &,
-                                          std::vector<SolutionType<EncodingType>> &,
-                                          II_Stochastic &);
-        template <typename EncodingType>
-        SolutionType<EncodingType>& select_SA(double,
-                                              SolutionType<EncodingType> &,
-                                              std::vector<SolutionType<EncodingType>> &);
+                                          Encoding &);
+        template <typename Encoding, typename Strategy>
+        void initialize(Instance<Encoding> &, II<Strategy> &, Encoding &);
+        template <typename Encoding>
+        void initialize(Instance<Encoding> &, SA &, Encoding &);
+        template <typename Encoding, typename TraitType>
+        void initialize(Instance<Encoding> &, TS<Encoding, TraitType> &, Encoding &);
+        template <typename Encoding>
+        void initialize(Instance<Encoding> &, RS &, Encoding &);
+        template <typename Encoding, typename Strategy>
+        Solution<Encoding>& select(Instance<Encoding> &,
+                                   Solution<Encoding> &,
+                                   std::vector<Solution<Encoding>> &,
+                                   II<Strategy> &);
+        template <typename Encoding>
+        Solution<Encoding>& select(Instance<Encoding> &,
+                                   Solution<Encoding> &,
+                                   std::vector<Solution<Encoding>> &,
+                                   SA &);
+        template <typename Encoding, typename Trait>
+        Solution<Encoding>& select(Instance<Encoding> &,
+                                   Solution<Encoding> &,
+                                   std::vector<Solution<Encoding>> &,
+                                   TS<Encoding, Trait> &);
+        template <typename Encoding>
+        Solution<Encoding>& select(Instance<Encoding> &,
+                                   Solution<Encoding> &,
+                                   std::vector<Solution<Encoding>> &,
+                                   RS &);
+        template <typename Encoding>
+        Solution<Encoding>& select_II(Instance<Encoding> &,
+                                      Solution<Encoding> &,
+                                      std::vector<Solution<Encoding>> &,
+                                      II_BestImproving &);
+        template <typename Encoding>
+        Solution<Encoding>& select_II(Instance<Encoding> &,
+                                      Solution<Encoding> &,
+                                      std::vector<Solution<Encoding>> &,
+                                      II_FirstImproving &);
+        template <typename Encoding>
+        Solution<Encoding>& select_II(Instance<Encoding> &,
+                                      Solution<Encoding> &,
+                                      std::vector<Solution<Encoding>> &,
+                                      II_Stochastic &);
+        template <typename Encoding>
+        Solution<Encoding>& select_SA(double,
+                                      Solution<Encoding> &,
+                                      std::vector<Solution<Encoding>> &);
     }
 
     namespace Evolutionary {
@@ -146,10 +148,11 @@ namespace MetaHeuristics {
         class DE_CurrentToRandom {};
         class DE_CurrentToBest {};
 
+        class DE_None {};
         class DE_Binomial {};
         class DE_Exponential {};
 
-        // EncodingType of DE is restrict to vector of real numbers (float | double | long double)
+        // Encoding of DE is restrict to vector of real numbers (float | double | long double)
         template <typename SelectionStrategy, typename CrossoverStrategy>
         struct DifferentialEvolution {
             double crossover_rate;
@@ -160,11 +163,30 @@ namespace MetaHeuristics {
             CrossoverStrategy crossover_strategy;
         };
 
-        template <typename EncodingType>
-        struct InstanceType {
+        template <typename FP>
+        struct _DE_INF_WRAPPER {
+            double (*original_evaluate)(std::vector<FP> &, void *);
+            void *original_inf;
+        };
+
+        template <typename Encoding>
+        struct Instance {
             uint64_t generation_limit;
             void *inf;
-            double (*evaluate)(EncodingType &, void *);
+            double (*evaluate)(Encoding &, void *);
+        };
+
+        template <typename FP>
+        class _valarray_eq_binder {
+        public:
+            _valarray_eq_binder(std::valarray<FP> &array) : _array(array) {}
+            _valarray_eq_binder() {}
+            bool operator()(std::valarray<FP> &array) {
+                return std::equal(std::begin(array), std::end(array), std::begin(_array));
+            }
+            void set(std::valarray<FP> &array) { _array = array; }
+        private:
+            std::valarray<FP> _array;
         };
 
         // aliases
@@ -172,58 +194,68 @@ namespace MetaHeuristics {
         using DE = DifferentialEvolution<SelectionStrategy, CrossoverStrategy>;
 
         // Function definitions
-        template <typename FPprecision, typename SelectionStrategy, typename CrossoverStrategy>
-        SolutionType<std::vector<FPprecision>> evolution(InstanceType<std::vector<FPprecision>> &,
-                                             DifferentialEvolution<SelectionStrategy, CrossoverStrategy> &,
-                                             std::vector<std::vector<FPprecision>> &);
-        template <typename EncodingType, typename AlgorithmType>
-        SolutionType<EncodingType> evolution(InstanceType<EncodingType> &,
-                                             AlgorithmType &,
-                                             std::vector<EncodingType> &);
-        template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
-        void initialize(InstanceType<EncodingType> &,
+        template <typename FP, typename SelectionStrategy, typename CrossoverStrategy>
+        Solution<std::vector<FP>> evolution(Instance<std::vector<FP>> &,
+                                            DifferentialEvolution<SelectionStrategy, CrossoverStrategy> &,
+                                            std::vector<std::vector<FP>> &);
+        template <typename Encoding, typename AlgorithmType>
+        Solution<Encoding> evolution(Instance<Encoding> &,
+                                     AlgorithmType &,
+                                     std::vector<Encoding> &);
+        template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
+        void initialize(Instance<Encoding> &,
                         DE<SelectionStrategy, CrossoverStrategy> &,
-                        std::vector<EncodingType> &);
-        template <typename EncodingType>
-        std::vector<SolutionType<EncodingType>> initialize_popultion(InstanceType<EncodingType> &,
-                                                                     std::vector<EncodingType> &);
-        template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
-        std::vector<SolutionType<EncodingType>> generate(InstanceType<EncodingType> &,
-                                                         std::vector<SolutionType<EncodingType>> &,
-                                                         DE<SelectionStrategy, CrossoverStrategy> &);
+                        std::vector<Encoding> &);
+        template <typename Encoding>
+        std::vector<Solution<Encoding>> initialize_popultion(Instance<Encoding> &,
+                                                                     std::vector<Encoding> &);
+        template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
+        void generate(Instance<Encoding> &,
+                      std::vector<Solution<Encoding>> &,
+                      DE<SelectionStrategy, CrossoverStrategy> &);
 
-        template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy> 
-        EncodingType DE_mate(EncodingType &,
-                             std::vector<SolutionType<EncodingType>> &,
+        template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy> 
+        Encoding DE_mate(Encoding &,
+                             std::vector<Solution<Encoding>> &,
                              DE<SelectionStrategy, CrossoverStrategy> &);
-        template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
-        EncodingType DE_mate_select(std::vector<EncodingType> &select_pool,
-                                    std::vector<SolutionType<EncodingType>> &population,
-                                    DE<SelectionStrategy, CrossoverStrategy> &,
-                                    DE_Random &);
+        template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
+        Encoding DE_mate_select(std::vector<Encoding> &select_pool,
+                                std::vector<Solution<Encoding>> &population,
+                                DE<SelectionStrategy, CrossoverStrategy> &,
+                                DE_Best &);
+        template <typename Encoding>
+        Encoding DE_mutation(std::vector<Encoding> &,
+                             std::vector<Solution<Encoding>> &,
+                             double,
+                             uint8_t);
+        template <typename Encoding>
+        Encoding DE_crossover(Encoding &,
+                              Encoding &,
+                              double,
+                              DE_None &);
+        template <typename FP>
+        double _DE_EVALUATE_WRAPPER(std::valarray<FP> &, void *);
     }
 }
 
 // Definitions
 
-namespace MH = MetaHeuristics;
-
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType>::SolutionType() : encoding(), score(0){}
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType>::SolutionType(EncodingType &e) : encoding(e), score(0){}
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType>::SolutionType(EncodingType &e, double s) : encoding(e), score(s){}
+template <typename Encoding>
+inline MH::Solution<Encoding>::Solution() : encoding(), score(0){}
+template <typename Encoding>
+inline MH::Solution<Encoding>::Solution(Encoding &e) : encoding(e), score(0){}
+template <typename Encoding>
+inline MH::Solution<Encoding>::Solution(Encoding &e, double s) : encoding(e), score(s){}
 
 // The main search framework for trajectory-based algorithms
-template <typename EncodingType, typename AlgoType>
-MH::SolutionType<EncodingType>
-MH::Trajectory::search(MH::Trajectory::InstanceType<EncodingType> &instance,
+template <typename Encoding, typename AlgoType>
+MH::Solution<Encoding>
+MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
                        AlgoType &algorithm,
-                       EncodingType &init) {
+                       Encoding &init) {
 
     MH::Trajectory::initialize(instance, algorithm, init);
-    auto current = SolutionType<EncodingType>(init, instance.evaluate(init, instance.inf));
+    auto current = Solution<Encoding>(init, instance.evaluate(init, instance.inf));
     auto min = current;
 
     for(uint64_t generation_count = 0;
@@ -231,13 +263,13 @@ MH::Trajectory::search(MH::Trajectory::InstanceType<EncodingType> &instance,
         ++generation_count) {
 
         auto neighbors_encoding = instance.neighbors(current.encoding);
-        std::vector<SolutionType<EncodingType>> neighbors(neighbors_encoding.size());
-        // evaluate each encoding, and store to vector of SolutionType
+        std::vector<Solution<Encoding>> neighbors(neighbors_encoding.size());
+        // evaluate each encoding, and store to vector of Solution
         std::transform(neighbors_encoding.begin(),
                        neighbors_encoding.end(),
                        neighbors.begin(),
                        [&](auto &e) {
-                           return SolutionType<EncodingType>(e, instance.evaluate(e, instance.inf));
+                           return Solution<Encoding>(e, instance.evaluate(e, instance.inf));
                        });
 
         // each algorithm is different on there selection
@@ -252,61 +284,61 @@ MH::Trajectory::search(MH::Trajectory::InstanceType<EncodingType> &instance,
 }
 
 // initialize II, nothing to do here
-template <typename EncodingType, typename StrategyType>
+template <typename Encoding, typename Strategy>
 inline void
-MH::Trajectory::initialize(MH::Trajectory::InstanceType<EncodingType> &,
-                           MH::Trajectory::II<StrategyType> &,
-                           EncodingType &) {
+MH::Trajectory::initialize(MH::Trajectory::Instance<Encoding> &,
+                           MH::Trajectory::II<Strategy> &,
+                           Encoding &) {
     std::cout << "Starting Iterative Improvement ..." << std::endl;
 }
 
 // initialize SA, set the temperature and epoch
-template <typename EncodingType>
+template <typename Encoding>
 inline void
-MH::Trajectory::initialize(MH::Trajectory::InstanceType<EncodingType> &,
+MH::Trajectory::initialize(MH::Trajectory::Instance<Encoding> &,
                            MH::Trajectory::SA &sa,
-                           EncodingType &) {
+                           Encoding &) {
     std::cout << "Starting Simulated Annealing ..." << std::endl;
     sa.temperature = sa.init_temperature;
     sa.epoch_count = 0;
 }
 
 // initialize TS, fill the tabu list (queue)
-template <typename EncodingType, typename TraitType>
+template <typename Encoding, typename TraitType>
 inline void
-MH::Trajectory::initialize(MH::Trajectory::InstanceType<EncodingType> &instance,
-                           MH::Trajectory::TS<EncodingType, TraitType> &ts,
-                           EncodingType & init) {
+MH::Trajectory::initialize(MH::Trajectory::Instance<Encoding> &instance,
+                           MH::Trajectory::TS<Encoding, TraitType> &ts,
+                           Encoding & init) {
     std::cout << "Starting Tabu Search ..." << std::endl;
     ts.queue.resize(ts.length);
     std::fill(ts.queue.begin(), ts.queue.end(), ts.trait(init, instance.inf));
 }
 
 // initialize RS, nothing to do here.
-template <typename EncodingType>
+template <typename Encoding>
 inline void
-MH::Trajectory::initialize(MH::Trajectory::InstanceType<EncodingType> &,
+MH::Trajectory::initialize(MH::Trajectory::Instance<Encoding> &,
                            MH::Trajectory::RS &,
-                           EncodingType &) {
+                           Encoding &) {
     std::cout << "Starting Random Search ..." << std::endl;
 }
 
 // II selection, call select_II based on II strategy
-template <typename EncodingType, typename StrategyType>
-inline MH::SolutionType<EncodingType> &
-MH::Trajectory::select(MH::Trajectory::InstanceType<EncodingType> &instance,
-                       MH::SolutionType<EncodingType> &current,
-                       std::vector<MH::SolutionType<EncodingType>> &neighbors,
-                       MH::Trajectory::II<StrategyType>& ii) {
+template <typename Encoding, typename Strategy>
+inline MH::Solution<Encoding> &
+MH::Trajectory::select(MH::Trajectory::Instance<Encoding> &instance,
+                       MH::Solution<Encoding> &current,
+                       std::vector<MH::Solution<Encoding>> &neighbors,
+                       MH::Trajectory::II<Strategy>& ii) {
     return MH::Trajectory::select_II(instance, current, neighbors, ii.strategy);
 }
 
 // SA selection, call select_SA and handle the cooling schedule
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType> &
-MH::Trajectory::select(MH::Trajectory::InstanceType<EncodingType > &,
-                       MH::SolutionType<EncodingType> &current,
-                       std::vector<MH::SolutionType<EncodingType>> &neighbors,
+template <typename Encoding>
+inline MH::Solution<Encoding> &
+MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &,
+                       MH::Solution<Encoding> &current,
+                       std::vector<MH::Solution<Encoding>> &neighbors,
                        MH::Trajectory::SA &sa) {
     auto &result = MH::Trajectory::select_SA(sa.temperature, current, neighbors);
     ++sa.epoch_count;
@@ -319,12 +351,12 @@ MH::Trajectory::select(MH::Trajectory::InstanceType<EncodingType > &,
 
 // TS selection, compare neighbors with tabu list, choose the minimum not in the list
 // and replace the oldest with the new solution
-template <typename EncodingType, typename TraitType>
-inline MH::SolutionType<EncodingType> &
-MH::Trajectory::select(MH::Trajectory::InstanceType<EncodingType > &instance,
-                       MH::SolutionType<EncodingType> &,
-                       std::vector<MH::SolutionType<EncodingType>> &neighbors,
-                       MH::Trajectory::TS<EncodingType, TraitType> &ts) {
+template <typename Encoding, typename TraitType>
+inline MH::Solution<Encoding> &
+MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &instance,
+                       MH::Solution<Encoding> &,
+                       std::vector<MH::Solution<Encoding>> &neighbors,
+                       MH::Trajectory::TS<Encoding, TraitType> &ts) {
     auto &min = neighbors.front();
     for(auto &neighbor : neighbors) {
         if(std::find(ts.queue.begin(),
@@ -340,22 +372,22 @@ MH::Trajectory::select(MH::Trajectory::InstanceType<EncodingType > &instance,
 }
 
 // Best improving II, select the minimum among neighbors
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType> &
-MH::Trajectory::select_II(MH::Trajectory::InstanceType<EncodingType> &,
-                          MH::SolutionType<EncodingType> &current,
-                          std::vector<MH::SolutionType<EncodingType>> &neighbors,
+template <typename Encoding>
+inline MH::Solution<Encoding> &
+MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
+                          MH::Solution<Encoding> &current,
+                          std::vector<MH::Solution<Encoding>> &neighbors,
                           II_BestImproving &) {
     auto &min = *std::min(neighbors.begin(), neighbors.end()); 
     return (min < current) ? min : current;
 }
 
 // First improving II, select the first solution that is better than current one during the iteration
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType> &
-MH::Trajectory::select_II(MH::Trajectory::InstanceType<EncodingType> &,
-                          MH::SolutionType<EncodingType> &current,
-                          std::vector<MH::SolutionType<EncodingType>> &neighbors,
+template <typename Encoding>
+inline MH::Solution<Encoding> &
+MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
+                          MH::Solution<Encoding> &current,
+                          std::vector<MH::Solution<Encoding>> &neighbors,
                           II_FirstImproving &) {
     for(auto &neighbor : neighbors) {
         if(neighbor < current) {
@@ -366,21 +398,21 @@ MH::Trajectory::select_II(MH::Trajectory::InstanceType<EncodingType> &,
 }
 
 // Stochastic II, not implement yet
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType> &
-MH::Trajectory::select_II(MH::Trajectory::InstanceType<EncodingType> &,
-                          MH::SolutionType<EncodingType> &current,
-                          std::vector<MH::SolutionType<EncodingType>> &,
+template <typename Encoding>
+inline MH::Solution<Encoding> &
+MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
+                          MH::Solution<Encoding> &current,
+                          std::vector<MH::Solution<Encoding>> &,
                           II_Stochastic &) {
     return current;
 }
 
 // SA selection
-template <typename EncodingType>
-inline MH::SolutionType<EncodingType> &
+template <typename Encoding>
+inline MH::Solution<Encoding> &
 MH::Trajectory::select_SA(double temperature,
-                           MH::SolutionType<EncodingType> &current,
-                           std::vector<MH::SolutionType<EncodingType>> &neighbors) {
+                           MH::Solution<Encoding> &current,
+                           std::vector<MH::Solution<Encoding>> &neighbors) {
     // uniform random number generators
     static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
     static std::uniform_real_distribution<double> uniform;
@@ -393,18 +425,18 @@ MH::Trajectory::select_SA(double temperature,
     return current;
 }
 
-
-template <typename EncodingType, typename AlgorithmType>
-MH::SolutionType<EncodingType>
-MH::Evolutionary::evolution(MH::Evolutionary::InstanceType<EncodingType> &instance,
+template <typename Encoding, typename AlgorithmType>
+MH::Solution<Encoding>
+MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
                             AlgorithmType &algorithm,
-                            std::vector<EncodingType> &init) {
+                            std::vector<Encoding> &init) {
     MH::Evolutionary::initialize(instance, algorithm, init);
     auto population = MH::Evolutionary::initialize_popultion(instance, init);
     for(auto generation_count = 0UL;
         generation_count < instance.generation_limit;
         ++generation_count) {
-        population = MH::Evolutionary::generate(instance, population, algorithm);
+        // generate will mutate the population
+        MH::Evolutionary::generate(instance, population, algorithm);
     }
     auto min = *std::min(population.begin(), population.end());
     std::cout << "Final value = " << min.score << std::endl;
@@ -413,84 +445,143 @@ MH::Evolutionary::evolution(MH::Evolutionary::InstanceType<EncodingType> &instan
 
 // Since DE will convert vector to valarray as an underlying type for performance,
 // we need this wrapper to convert the initial population and restore the returned valarray
-template <typename FPprecision, typename SelectionStrategy, typename CrossoverStrategy>
-MH::SolutionType<std::vector<FPprecision>>
-MH::Evolutionary::evolution(InstanceType<std::vector<FPprecision>> &instance,
+template <typename FP, typename SelectionStrategy, typename CrossoverStrategy>
+MH::Solution<std::vector<FP>>
+MH::Evolutionary::evolution(Instance<std::vector<FP>> &instance,
                             DifferentialEvolution<SelectionStrategy, CrossoverStrategy> &de,
-                            std::vector<std::vector<FPprecision>> &init) {
-    // A new instance set to valarray type
-    auto Uinstance = MH::Evolutionary::InstanceType<std::valarray<FPprecision>>();
-    Uinstance.evaluate = instance.evaluate;
+                            std::vector<std::vector<FP>> &init) {
+    // Underly instance set to valarray type
+    // this wrapper wrap original evaluate function pointer and inf to new instance'inf
+    auto wrapper = new _DE_INF_WRAPPER<FP>();
+    wrapper->original_evaluate = instance.evaluate;
+    wrapper->original_inf = instance.inf;
+    auto Uinstance = MH::Evolutionary::Instance<std::valarray<FP>>();
+    // this evaluation function wrapper will restore original evaluator from inf
+    Uinstance.evaluate = _DE_EVALUATE_WRAPPER;
     Uinstance.generation_limit = instance.generation_limit;
-    Uinstance.inf = instance.inf;
+    Uinstance.inf = reinterpret_cast<void *>(wrapper);
     // convert real vector to valarray
-    std::vector<std::valarray<FPprecision>> valarray_init(init.size());
+    std::vector<std::valarray<FP>> valarray_init(init.size());
     std::transform(init.begin(),
                    init.end(),
                    valarray_init.begin(),
                    [&](auto &s) {
-                       return std::valarray<FPprecision>(s.data(), s.size());
+                       return std::valarray<FP>(s.data(), s.size());
                    });
-    auto &result = MH::Evolutionary::evolution(Uinstance, de, valarray_init);
+    auto result = MH::Evolutionary::evolution(Uinstance, de, valarray_init);
     // convert vallarray back to real vector
-    std::vector<FPprecision> vec_result(result.encoding.begin(), result.encoding.end());
-    return MH::SolutionType<std::vector<FPprecision>>(vec_result, result.score);
+    std::vector<FP> vec_result(std::begin(result.encoding), std::end(result.encoding));
+    delete wrapper;
+    return MH::Solution<std::vector<FP>>(vec_result, result.score);
 }
 
-template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
+template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
 inline void
-MH::Evolutionary::initialize(MH::Evolutionary::InstanceType<EncodingType> &,
+MH::Evolutionary::initialize(MH::Evolutionary::Instance<Encoding> &,
                              MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &,
-                             std::vector<EncodingType> &) {
+                             std::vector<Encoding> &) {
     std::cout << "Starting Differential Evolution ... " << std::endl;
 }
 
 
-template <typename EncodingType>
-std::vector<MH::SolutionType<EncodingType>>
-MH::Evolutionary::initialize_popultion(MH::Evolutionary::InstanceType<EncodingType> &instance,
-                                       std::vector<EncodingType> &init) {
-    std::vector<MH::SolutionType<EncodingType>> population;
+template <typename Encoding>
+std::vector<MH::Solution<Encoding>>
+MH::Evolutionary::initialize_popultion(MH::Evolutionary::Instance<Encoding> &instance,
+                                       std::vector<Encoding> &init) {
+    std::vector<MH::Solution<Encoding>> population(init.size());
     std::transform(init.begin(),
                    init.end(),
                    population.begin(),
                    [&](auto &s) {
-                       return MH::SolutionType<EncodingType>(s, instance.evaluate(s, instance.addinf));
+                       return MH::Solution<Encoding>(s, instance.evaluate(s, instance.inf));
                    });
     return population;
 }
 
-template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
-std::vector<MH::SolutionType<EncodingType>>
-MH::Evolutionary::generate(InstanceType<EncodingType> &instance,
-                           std::vector<SolutionType<EncodingType>> &population,
+template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
+void
+MH::Evolutionary::generate(Instance<Encoding> &instance,
+                           std::vector<Solution<Encoding>> &population,
                            MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &de) {
-    for(auto i = 0UL; i < population.szie(); ++i) {
-        auto &target_vec = population[i].encoding;
-        auto &trial_vec = MH::Evolutionary::DE_mate(instance, target_vec, population, de);
-        population[i] = MH::Evolutionary::env_select(instance, target_vec, trial_vec);
+    for(auto i = 0UL; i < population.size(); ++i) {
+        auto target_vec = population[i].encoding;
+        auto trial_vec = MH::Evolutionary::DE_mate(target_vec, population, de);
+        // environment selection
+        auto trial_score = instance.evaluate(trial_vec, instance.inf);
+        if(trial_score < population[i].score) {
+            population[i] = MH::Solution<Encoding>(trial_vec, trial_score);
+        }
     }
 }
 
 
-template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy> 
-EncodingType
-MH::Evolutionary::DE_mate(EncodingType &target_vec,
-                          std::vector<SolutionType<EncodingType>> &population,
+template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy> 
+Encoding
+MH::Evolutionary::DE_mate(Encoding &target_vec,
+                          std::vector<Solution<Encoding>> &population,
                           MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &de) {
-    std::vector<EncodingType> select_pool;
+    std::vector<Encoding> select_pool;
     select_pool.push_back(target_vec);
-    auto &mutant_vec = MH::Evolutioanry::DE_mate_select(select_pool, population, de, de.selection_strategy);
+    auto mutant_vec = MH::Evolutionary::DE_mate_select(select_pool, population, de, de.selection_strategy);
     mutant_vec += MH::Evolutionary::DE_mutation(select_pool, population, de.scaling_factor, de.num_of_diff_vectors);
-    auto &trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de.crossover_strategy);
+    auto trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de.crossover_strategy);
     return target_vec;
 }
 
-template <typename EncodingType, typename SelectionStrategy, typename CrossoverStrategy>
-EncodingType
-MH::Evolutionary::DE_mate_select(std::vector<EncodingType> &select_pool,
-                                 std::vector<MH::SolutionType<EncodingType>> &population,
+template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
+Encoding
+MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
+                                 std::vector<MH::Solution<Encoding>> &population,
                                  MH::Evolutionary::DE<SelectionStrategy, CrossoverStrategy> &,
-                                 MH::Evolutionary::DE_Random &) {
+                                 MH::Evolutionary::DE_Best &) {
+    select_pool.push_back( (*std::min(population.begin(), population.end())).encoding );
+    return select_pool.back();
+}
 
+template <typename Encoding>
+Encoding
+MH::Evolutionary::DE_mutation(std::vector<Encoding> &select_pool,
+                         std::vector<MH::Solution<Encoding>> &population,
+                         double scaling_factor,
+                         uint8_t diff_vecs) {
+    auto sol1 = select_pool.front();
+    auto sol2 = select_pool.front();
+    auto mutant_vec = Encoding(sol1.size());
+
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
+    for(auto i = 0U; i < diff_vecs; ++i) {
+        _valarray_eq_binder<double> valarr_eq;
+        do {
+            auto rand_idx = uniform(eng);
+            sol1 = population[rand_idx].encoding;
+            valarr_eq.set(sol1);
+        } while(std::find_if(select_pool.begin(), select_pool.end(), valarr_eq) != select_pool.end());
+        select_pool.push_back(sol1);
+        do {
+            auto rand_idx = uniform(eng);
+            sol2 = population[rand_idx].encoding;
+            valarr_eq.set(sol2);
+        } while(std::find_if(select_pool.begin(), select_pool.end(), valarr_eq) != select_pool.end());
+        select_pool.push_back(sol2);
+        mutant_vec += sol2 - sol1;
+    }
+    return scaling_factor * mutant_vec;
+}
+
+template <typename Encoding>
+Encoding
+MH::Evolutionary::DE_crossover(Encoding &,
+                               Encoding &mutant_vec,
+                               double,
+                               MH::Evolutionary::DE_None &) {
+    return mutant_vec;
+}
+
+template <typename FP>
+inline double
+MH::Evolutionary::_DE_EVALUATE_WRAPPER(std::valarray<FP> &sol, void *inf) {
+    std::vector<FP> vsol(std::begin(sol), std::end(sol));
+    auto wrapper = *reinterpret_cast<MH::Evolutionary::_DE_INF_WRAPPER<FP> *>(inf);
+    return wrapper.original_evaluate(vsol, wrapper.original_inf);
 }

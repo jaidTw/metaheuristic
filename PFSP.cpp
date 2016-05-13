@@ -10,7 +10,6 @@
 #include <chrono>
 
 // aliases
-namespace MH = MetaHeuristics;
 typedef std::vector<uint8_t> Permutation;
 typedef std::vector<std::vector<uint16_t>> Table;
 
@@ -48,7 +47,7 @@ int main(int argc, char** argv) {
 
 /*    
     // Configure problem instance for trajectory based metaheuristics
-    auto Tinstance = MH::Trajectory::InstanceType<Permutation>();
+    auto Tinstance = MH::Trajectory::Instance<Permutation>();
     Tinstance.generation_limit = 3000;
     Tinstance.neighbors = PFSPneighbors;
     Tinstance.evaluate = PFSPmakespan;
@@ -71,12 +70,12 @@ int main(int argc, char** argv) {
 */
 
     // Configure problem instance for evolutionary algorithms
-    auto Einstance = MH::Evolutionary::InstanceType<std::vector<double>>();
+    auto Einstance = MH::Evolutionary::Instance<std::vector<double>>();
     Einstance.generation_limit = 3000;
     Einstance.evaluate = DETest;
     Einstance.inf = nullptr;
 
-    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Binomial>();
+    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_None>();
     DE.crossover_rate = 0.5;
     DE.scaling_factor = 0.5;
     DE.num_of_diff_vectors = 2;
