@@ -10,19 +10,6 @@
 #include <deque>
 #include <valarray>
 
-void dump(std::valarray<double> &arr) {
-    for(auto &num : arr) {
-        std::cout << num << " ";
-    }
-    std::cout << "---valarray---" << std::endl;
-}
-
-void dump(std::vector<double> &arr) {
-    for(auto &num : arr) {
-        std::cout << num << " ";
-    }
-    std::cout << "---vector---" << std::endl;
-}
 // Declarations
 namespace MH {
 
@@ -493,7 +480,6 @@ MH::Evolutionary::initialize(MH::Evolutionary::Instance<Encoding> &,
     std::cout << "Starting Differential Evolution ... " << std::endl;
 }
 
-
 template <typename Encoding>
 MH::SolCollection<Encoding>
 MH::Evolutionary::initialize_popultion(MH::Evolutionary::Instance<Encoding> &instance,
@@ -523,7 +509,6 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     }
 }
 
-
 template <typename Encoding, typename Selection, typename Crossover> 
 Encoding
 MH::Evolutionary::DE_mate(Encoding &target_vec,
@@ -542,9 +527,47 @@ Encoding
 MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &,
+                                 MH::Evolutionary::DE_Random &) {
+    // Random number generator
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
+
+    select_pool.push_back(population[uniform(eng)].encoding);
+    return select_pool.back();
+}
+
+template <typename Encoding, typename Selection, typename Crossover>
+Encoding
+MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
+                                 MH::SolCollection<Encoding> &population,
+                                 MH::Evolutionary::DE<Selection, Crossover> &,
                                  MH::Evolutionary::DE_Best &) {
     select_pool.push_back( (*std::min(population.begin(), population.end())).encoding );
     return select_pool.back();
+}
+
+template <typename Encoding, typename Selection, typename Crossover>
+Encoding
+MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
+                                 MH::SolCollection<Encoding> &population,
+                                 MH::Evolutionary::DE<Selection, Crossover> &de,
+                                 MH::Evolutionary::DE_CurrentToRandom &) {
+    // Random number generator
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
+
+    select_pool.push_back(population[uniform(eng)].encoding);
+    return select_pool.front() + de.current_factor * (select_pool.back() - select_pool.front());
+}
+
+template <typename Encoding, typename Selection, typename Crossover>
+Encoding
+MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
+                                 MH::SolCollection<Encoding> &population,
+                                 MH::Evolutionary::DE<Selection, Crossover> &de,
+                                 MH::Evolutionary::DE_CurrentToBest &) {
+    select_pool.push_back( (*std::min(population.begin(), population.end())).encoding );
+    return select_pool.front() + de.current_factor * (select_pool.back() - select_pool.front());
 }
 
 template <typename Encoding>
@@ -553,12 +576,14 @@ MH::Evolutionary::DE_mutation(std::vector<Encoding> &select_pool,
                          MH::SolCollection<Encoding> &population,
                          double scaling_factor,
                          uint8_t diff_vecs) {
+    // random number generators
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
+
     auto sol1 = select_pool.front();
     auto sol2 = select_pool.front();
     auto mutant_vec = Encoding(sol1.size());
 
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
-    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
     // find 2 * n mutual different solutions to generate n vectos
     for(auto i = 0U; i < diff_vecs; ++i) {
         // valarray equality functor as an predicate for std::find_if()
@@ -571,7 +596,6 @@ MH::Evolutionary::DE_mutation(std::vector<Encoding> &select_pool,
             valarr_eq.set(sol1);
         } while(std::find_if(select_pool.begin(), select_pool.end(), valarr_eq) != select_pool.end());
         select_pool.push_back(sol1);
-        
         do {
             auto rand_idx = uniform(eng);
             sol2 = population[rand_idx].encoding;
