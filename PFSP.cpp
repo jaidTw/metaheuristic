@@ -154,5 +154,9 @@ inline Permutation PFSPconvert(Permutation &encoding, void *) {
 double DETest(std::vector<double>& sol, void *) {
     std::vector<double> csol(sol);
     std::for_each(csol.begin(), csol.end(), [&](auto &n) { n *= n; });
+    for(auto &val : csol) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
     return std::accumulate(sol.begin(), sol.end(), .0);
 }
