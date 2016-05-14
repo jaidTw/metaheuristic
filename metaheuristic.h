@@ -594,12 +594,13 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
     static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
 
     Encoding trial_vec(target_vec.size());
+    trial_vec = target_vec;
     std::transform(std::begin(target_vec),
                    std::end(target_vec),
                    std::begin(mutant_vec),
                    std::begin(trial_vec),
                    [&](auto &target, auto &mutant) {
-                       std::cout << "CALLING" << std::endl;
+                   // The uniform real generator will result in an infinite loop in g++ 6.1.1
                        return uniform_r(eng) < crossover_rate ? mutant : target;
                    });
     auto rand_idx = uniform_i(eng);

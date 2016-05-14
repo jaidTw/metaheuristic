@@ -1,6 +1,8 @@
+C++ = clang++
+CPPFLAGS = -march=native -std=gnu++14 -Wall
 debug:
-	c++ PFSP.cpp -o PFSP -Wall -Wextra -Werror -std=gnu++14 -g -Og
+	$(C++) $(CPPFLAGS) -Wextra -Werror -g -Og PFSP.cpp -o PFSP
 release:
-	c++ PFSP.cpp -o PFSP -Wall -march=native -std=gnu++14 -O3
+	$(C++) $(CPPFLAGS) -O3 PFSP.cpp -o PFSP 
 fast:
-	c++ PFSP.cpp -o PFSP -Wall -march=native -std=gnu++14 -Ofast
+	$(C++) $(CPPFLAGS) -Ofast PFSP.cpp -o PFSP
