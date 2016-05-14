@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
     Einstance.evaluate = DETest;
     Einstance.inf = nullptr;
 
-    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_None>();
+    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Binomial>();
     DE.crossover_rate = 0.5;
     DE.scaling_factor = 0.5;
     DE.num_of_diff_vectors = 2;

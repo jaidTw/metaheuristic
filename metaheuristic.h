@@ -233,6 +233,11 @@ namespace MH {
                               Encoding &,
                               double,
                               DE_None &);
+        template <typename Encoding>
+        Encoding DE_crossover(Encoding &,
+                              Encoding &,
+                              double,
+                              DE_Binomial &);
         template <typename FP>
         double _DE_EVALUATE_WRAPPER(std::valarray<FP> &, void *);
     }
@@ -525,7 +530,7 @@ MH::Evolutionary::DE_mate(Encoding &target_vec,
     auto mutant_vec = MH::Evolutionary::DE_mate_select(select_pool, population, de, de.selection_strategy);
     mutant_vec += MH::Evolutionary::DE_mutation(select_pool, population, de.scaling_factor, de.num_of_diff_vectors);
     auto trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de.crossover_strategy);
-    return target_vec;
+    return trial_vec;
 }
 
 template <typename Encoding, typename SelectionStrategy, typename CrossoverStrategy>
@@ -576,6 +581,30 @@ MH::Evolutionary::DE_crossover(Encoding &,
                                double,
                                MH::Evolutionary::DE_None &) {
     return mutant_vec;
+}
+
+template <typename Encoding>
+Encoding
+MH::Evolutionary::DE_crossover(Encoding &target_vec,
+                               Encoding &mutant_vec,
+                               double crossover_rate,
+                               MH::Evolutionary::DE_Binomial &) {
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::uniform_real_distribution<double> uniform_r;
+    static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
+
+    Encoding trial_vec(target_vec.size());
+    std::transform(std::begin(target_vec),
+                   std::end(target_vec),
+                   std::begin(mutant_vec),
+                   std::begin(trial_vec),
+                   [&](auto &target, auto &mutant) {
+                       std::cout << "CALLING" << std::endl;
+                       return uniform_r(eng) < crossover_rate ? mutant : target;
+                   });
+    auto rand_idx = uniform_i(eng);
+    trial_vec[rand_idx] = mutant_vec[rand_idx];
+    return trial_vec;
 }
 
 template <typename FP>
