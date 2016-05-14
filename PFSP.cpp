@@ -71,15 +71,15 @@ int main(int argc, char** argv) {
 
     // Configure problem instance for evolutionary algorithms
     auto Einstance = MH::Evolutionary::Instance<std::vector<double>>();
-    Einstance.generation_limit = 3000;
+    Einstance.generation_limit = 7000;
     Einstance.evaluate = DETest;
     Einstance.inf = nullptr;
 
-    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Binomial>();
-    DE.crossover_rate = 0.5;
-    DE.scaling_factor = 0.5;
+    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Exponential>();
+    DE.crossover_rate = 0.4;
+    DE.scaling_factor = 0.6;
     DE.num_of_diff_vectors = 2;
-    DE.current_factor = 0.6;
+    DE.current_factor = 0.5;
     // random engine use to shuffle init solution
     std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 
@@ -154,9 +154,5 @@ inline Permutation PFSPconvert(Permutation &encoding, void *) {
 double DETest(std::vector<double>& sol, void *) {
     std::vector<double> csol(sol);
     std::for_each(csol.begin(), csol.end(), [&](auto &n) { n *= n; });
-    for(auto &val : csol) {
-        std::cout << val << " ";
-    }
-    std::cout << std::endl;
-    return std::accumulate(sol.begin(), sol.end(), .0);
+    return std::accumulate(csol.begin(), csol.end(), .0);
 }

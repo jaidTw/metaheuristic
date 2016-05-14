@@ -10,6 +10,19 @@
 #include <deque>
 #include <valarray>
 
+void dump(std::valarray<double> &arr) {
+    for(auto &num : arr) {
+        std::cout << num << " ";
+    }
+    std::cout << "---valarray---" << std::endl;
+}
+
+void dump(std::vector<double> &arr) {
+    for(auto &num : arr) {
+        std::cout << num << " ";
+    }
+    std::cout << "---vector---" << std::endl;
+}
 // Declarations
 namespace MH {
 
@@ -621,14 +634,12 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
     auto trial_vec(target_vec);
     auto pos = uniform_i(eng);
     for(auto i = 0UL; i < target_vec.size(); ++i) {
-        std::cout << pos << " ";
         trial_vec[pos] = mutant_vec[pos];
         pos = (pos + 1) % target_vec.size();
         if(uniform_r(eng) >= crossover_rate) {
             break;
         }
     }
-    std::cout << std::endl;
     return trial_vec;
 }
 
