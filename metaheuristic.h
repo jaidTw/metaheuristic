@@ -11,10 +11,12 @@
 #include <valarray>
 
 // Declarations
+// All things in this library will be in MH namespace
 namespace MH {
 
     // All algorithms will use Solution to store the solution encoding and evaluation result (score).
     // Template parameter Encoding is the type of the encoding suppose to use.
+    // this class is not suppose to be directly used by users.
     template <typename Encoding>
     struct Solution {
         friend bool operator<(Solution<Encoding> &a, Solution<Encoding> &b) {
@@ -30,38 +32,41 @@ namespace MH {
         Solution(Encoding &, double);
     };
 
+    // This collection will serve as the neighbors collection in trajectory algorithms,
+    // and population in evolutionary algorithms
     template <typename Encoding>
     using SolCollection = std::vector<Solution<Encoding>>;
 
     namespace Trajectory {
 
-        // A trajectory instance object specifies generation limit, neighborhood functions and evaluation function
+        // A trajectory instance object specifies the generation limit, the neighborhood generator and the evaluator
         // there is also an optional "inf" field to provide additional information to evaluation function
         template <typename Encoding>
         struct Instance {
             uint64_t generation_limit;
-            // user provide neighborhood generate function
-            // aceept an encoding and return a vector of neighborhood encodings
+            // neighborhood generator, aceept an encoding and return a vector of neighborhood encodings
             std::vector<Encoding> (*neighbors)(Encoding &);
-            // optional information provide to evaluate
-            void *inf;
-            // evaluate function, accept an encoding and additional information from instance.inf as (void *)
+            // evaluator, accept an encoding and additional information from "inf" as (void *)
             // return a real number which is suppose to be minimize.
             double (*evaluate)(Encoding &, void *);
+            // optional information provide to evaluator
+            void *inf;
         };
 
-
+        // The II algorithm class
+        // II< II_BestImproving | II_FirstImproving | II_Stochastic >
         template <typename Strategy>
-        struct II{
+        struct II {
             Strategy strategy;
         };
 
-        // These class is used as temeplate parameter for II
-        class II_BestImproving {};
-        class II_FirstImproving {};
-        class II_Stochastic {};
+        // II search strategies
+        struct II_BestImproving {};
+        struct II_FirstImproving {};
+        struct II_Stochastic {};
 
-        struct SA{
+        // The SA algorithm class
+        struct SA {
             double init_temperature;
             int64_t epoch_length;
             double (*cooling)(double);
@@ -70,7 +75,7 @@ namespace MH {
         };
 
         template <typename Encoding, typename TraitType>
-        struct TS{
+        struct TS {
             int8_t length;
             // the trait function accept an encoding and transform it into traits to store in tabu list.
             TraitType (*trait)(Encoding&, void *);
@@ -78,9 +83,9 @@ namespace MH {
         };
 
         // These basic searches is aim to compare with others
-        struct RS{};
-        struct BFS{};
-        struct DFS{};
+        struct RS {};
+        struct BFS {};
+        struct DFS {};
 
         // aliases
         template <typename Strategy>
@@ -135,11 +140,13 @@ namespace MH {
 
     namespace Evolutionary {
 
+        // DE selection strategies
         class DE_Random {};
         class DE_Best {};
         class DE_CurrentToRandom {};
         class DE_CurrentToBest {};
 
+        // DE crossover strategies
         class DE_None {};
         class DE_Binomial {};
         class DE_Exponential {};
@@ -448,16 +455,18 @@ MH::Solution<std::vector<FP>>
 MH::Evolutionary::evolution(Instance<std::vector<FP>> &instance,
                             DE<Selection, Crossover> &de,
                             std::vector<std::vector<FP>> &init) {
-    // Underly instance set to valarray type
-    // this wrapper wrap original evaluate function pointer and inf to new instance'inf
-    auto wrapper = new _DE_INF_WRAPPER<FP>();
-    wrapper->original_evaluate = instance.evaluate;
-    wrapper->original_inf = instance.inf;
+    // this wrapper wrap original evaluate function pointer and inf to new instance's inf
+    _DE_INF_WRAPPER<FP> wrapper;
+    wrapper.original_evaluate = instance.evaluate;
+    wrapper.original_inf = instance.inf;
+
+    // instance set to valarray type
     auto Uinstance = MH::Evolutionary::Instance<std::valarray<FP>>();
     // this evaluation function wrapper will restore original evaluator from inf
     Uinstance.evaluate = _DE_EVALUATE_WRAPPER;
     Uinstance.generation_limit = instance.generation_limit;
-    Uinstance.inf = reinterpret_cast<void *>(wrapper);
+    Uinstance.inf = reinterpret_cast<void *>(&wrapper);
+
     // convert real vector to valarray
     std::vector<std::valarray<FP>> valarray_init(init.size());
     std::transform(init.begin(), init.end(),
@@ -466,9 +475,9 @@ MH::Evolutionary::evolution(Instance<std::vector<FP>> &instance,
                        return std::valarray<FP>(s.data(), s.size());
                    });
     auto result = MH::Evolutionary::evolution(Uinstance, de, valarray_init);
+
     // convert vallarray back to real vector
     std::vector<FP> vec_result(std::begin(result.encoding), std::end(result.encoding));
-    delete wrapper;
     return MH::Solution<std::vector<FP>>(vec_result, result.score);
 }
 
@@ -481,7 +490,7 @@ MH::Evolutionary::initialize(MH::Evolutionary::Instance<Encoding> &,
 }
 
 template <typename Encoding>
-MH::SolCollection<Encoding>
+inline MH::SolCollection<Encoding>
 MH::Evolutionary::initialize_popultion(MH::Evolutionary::Instance<Encoding> &instance,
                                        std::vector<Encoding> &init) {
     MH::SolCollection<Encoding> population(init.size());
@@ -494,7 +503,7 @@ MH::Evolutionary::initialize_popultion(MH::Evolutionary::Instance<Encoding> &ins
 }
 
 template <typename Encoding, typename Selection, typename Crossover>
-void
+inline void
 MH::Evolutionary::generate(Instance<Encoding> &instance,
                            std::vector<Solution<Encoding>> &population,
                            MH::Evolutionary::DE<Selection, Crossover> &de) {
@@ -510,7 +519,7 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
 }
 
 template <typename Encoding, typename Selection, typename Crossover> 
-Encoding
+inline Encoding
 MH::Evolutionary::DE_mate(Encoding &target_vec,
                           std::vector<Solution<Encoding>> &population,
                           MH::Evolutionary::DE<Selection, Crossover> &de) {
@@ -523,7 +532,7 @@ MH::Evolutionary::DE_mate(Encoding &target_vec,
 }
 
 template <typename Encoding, typename Selection, typename Crossover>
-Encoding
+inline Encoding
 MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &,
@@ -537,7 +546,7 @@ MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
 }
 
 template <typename Encoding, typename Selection, typename Crossover>
-Encoding
+inline Encoding
 MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &,
@@ -547,7 +556,7 @@ MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
 }
 
 template <typename Encoding, typename Selection, typename Crossover>
-Encoding
+inline Encoding
 MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &de,
@@ -561,7 +570,7 @@ MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
 }
 
 template <typename Encoding, typename Selection, typename Crossover>
-Encoding
+inline Encoding
 MH::Evolutionary::DE_mate_select(std::vector<Encoding> &select_pool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &de,
@@ -607,8 +616,9 @@ MH::Evolutionary::DE_mutation(std::vector<Encoding> &select_pool,
     return scaling_factor * mutant_vec;
 }
 
+// No crossover, do nothing
 template <typename Encoding>
-Encoding
+inline Encoding
 MH::Evolutionary::DE_crossover(Encoding &,
                                Encoding &mutant_vec,
                                double,
@@ -616,6 +626,7 @@ MH::Evolutionary::DE_crossover(Encoding &,
     return mutant_vec;
 }
 
+// DE binomial crossover
 template <typename Encoding>
 Encoding
 MH::Evolutionary::DE_crossover(Encoding &target_vec,
@@ -628,8 +639,8 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
     static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
 
     Encoding trial_vec(target_vec.size());
-    trial_vec = target_vec;
-    // combine two vectors
+
+    // combine two vectors into trial vector
     std::transform(std::begin(target_vec), std::end(target_vec),
                    std::begin(mutant_vec), std::begin(trial_vec),
                    [&](auto &target, auto &mutant) {
@@ -638,12 +649,14 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
                    // Work in clang 3.7.1
                        return uniform_r(eng) < crossover_rate ? mutant : target;
                    });
-    // guarantee at least one field is inherit from mutant vector
+
+    // guarantee at least one random field is inherit from mutant vector
     auto pos = uniform_i(eng);
     trial_vec[pos] = mutant_vec[pos];
     return trial_vec;
 }
 
+// DE exponential crossover
 template <typename Encoding>
 Encoding
 MH::Evolutionary::DE_crossover(Encoding &target_vec,
@@ -655,11 +668,15 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
     static std::uniform_real_distribution<double> uniform_r;
     static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
 
+    // do the crossover based on target vector
     auto trial_vec(target_vec);
+    
+    // generate random crossover starting position
     auto pos = uniform_i(eng);
     for(auto i = 0UL; i < target_vec.size(); ++i) {
         trial_vec[pos] = mutant_vec[pos];
         pos = (pos + 1) % target_vec.size();
+ 
         if(uniform_r(eng) >= crossover_rate) {
             break;
         }
@@ -670,7 +687,12 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
 template <typename FP>
 inline double
 MH::Evolutionary::_DE_EVALUATE_WRAPPER(std::valarray<FP> &sol, void *inf) {
+    // convert valarray back to vector
     std::vector<FP> vsol(std::begin(sol), std::end(sol));
+
+    // restore original evaluator and inf from wrapper
     auto wrapper = *reinterpret_cast<MH::Evolutionary::_DE_INF_WRAPPER<FP> *>(inf);
+
+    // then we can use the original evaluator
     return wrapper.original_evaluate(vsol, wrapper.original_inf);
 }
