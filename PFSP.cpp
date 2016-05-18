@@ -1,6 +1,7 @@
 #include "metaheuristic.h"
 #include <cstdlib>
 #include <cstdint>
+#include <numeric>
 #include <iostream>
 #include <fstream>
 #include <limits>
@@ -13,15 +14,15 @@
 typedef std::vector<uint8_t> Permutation;
 typedef std::vector<std::vector<uint16_t>> Table;
 
-std::vector<std::vector<uint16_t>> PFSPparse_data(std::fstream&);
-std::vector<Permutation> PFSPneighbors(Permutation&);
-double PFSPmakespan(Permutation&, void*);
-Permutation PFSPconvert(Permutation &encoding, void *);
+std::vector<std::vector<uint16_t>> PFSPParseData(std::fstream&);
+std::vector<Permutation> PFSPSwapNeighbourhood(Permutation&);
+double PFSPMakespan(Permutation&, void*);
+Permutation PFSPConvert(Permutation &encoding, void *);
 double DETest(std::vector<double> &, void *);
 
 int main(int argc, char** argv) {
-    if(argc != 2) {
-        std::cerr << "Usage : ./PFSP [test_data]" << std::endl;
+    if(argc < 2) {
+        std::cerr << "Usage: ./pfsp [test_data]" << std::endl;
         exit(-1);
     }
     std::cout << "Opening " << argv[1] << "... ";
@@ -32,49 +33,62 @@ int main(int argc, char** argv) {
     }
     catch (std::ifstream::failure &e) {
         std::cerr << "An error occur while opening file." << std::endl;
-        std::cerr << "Please make sure the file name is avlid and isn't in use." << std::endl;
+        std::cerr << "Please make sure the file name is valid and isn't in use." << std::endl;
         exit(-1);
     }
-    std::cout << "Success" << std::endl;
+    std::cout << "Success." << std::endl;
 
     std::cout << "Parsing data... ";
-    auto time_table = PFSPparse_data(file);
-    auto num_machines = time_table.size();
-    auto num_tasks = time_table.front().size();
-    std::cout << "done" << std::endl;
-    std::cout << "Number of tasks : " << num_tasks << std::endl;
-    std::cout << "Number of machines : " << num_machines << std::endl;
-
-/*    
-    // Configure problem instance for trajectory based metaheuristics
+    auto timeTable = PFSPParseData(file);
+    auto numMachines = timeTable.size();
+    auto numJobs = timeTable.front().size();
+    std::cout << "Done." << std::endl;
+    std::cout << "Number of jobs: " << numJobs << std::endl;
+    std::cout << "Number of machines: " << numMachines << std::endl;
+    
+/*
+    // Configure problem instance for trajectory based metaheuristics.
     auto Tinstance = MH::Trajectory::Instance<Permutation>();
-    Tinstance.generation_limit = 3000;
-    Tinstance.neighbors = PFSPneighbors;
-    Tinstance.evaluate = PFSPmakespan;
-    Tinstance.inf = reinterpret_cast<void *>(&time_table);
+    Tinstance.generationLimit = 3000;
+    Tinstance.neighbourhood = PFSPSwapNeighbourhood;
+    Tinstance.evaluate = PFSPMakespan;
+    Tinstance.inf = reinterpret_cast<void *>(&timeTable);
     
     // II_FirstImproving | II_BestImproving | II_Stochastic
     auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
-
     auto SA = MH::Trajectory::SimulatedAnnealing();
     SA.init_temperature = 10000;
     SA.epoch_length = 20;
-
     auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
     TS.length = 70;
-    TS.trait = PFSPconvert;
-
+    TS.trait = PFSPConvert;
     // Generate initial solution
-    Permutation init(num_tasks);
+    Permutation init(numJobs);
     std::iota(init.begin(), init.end(), 1);
 */
 
-    // Configure problem instance for evolutionary algorithms
-    auto Einstance = MH::Evolutionary::Instance<std::vector<double>>();
-    Einstance.generation_limit = 7000;
-    Einstance.evaluate = DETest;
-    Einstance.inf = nullptr;
+    // Configure the problem instance for evolutionary algorithms.
+    auto Einstance = MH::Evolutionary::Instance<Permutation>();
+    Einstance.generationLimit = 7000;
+    Einstance.evaluate = PFSPMakespan;
+    Einstance.inf = reinterpret_cast<void *>(&timeTable);
 
+    // Configure a memetic algorithm.
+    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament, MH::Evolutionary::OP>(100, numJobs);
+    MA.selectionStrategy.size = 2;
+
+    // random engine
+    std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+
+    // Generate initial population.
+    std::vector<Permutation> init(100);
+    for(auto &sol : init) {
+        sol.resize(numJobs);
+        std::iota(sol.begin(), sol.end(), 1);
+        std::shuffle(sol.begin(), sol.end(), eng);
+    }
+    
+/*
     auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Binomial>();
     DE.crossover_rate = 0.6;
     DE.scaling_factor = 0.6;
@@ -89,65 +103,66 @@ int main(int argc, char** argv) {
         std::iota(sol.begin(), sol.end(), 1);
         std::shuffle(sol.begin(), sol.end(), eng);
     }
+*/
 
     //MH::Trajectory::search(Tinstance, TS, init);
-    MH::Evolutionary::evolution(Einstance, DE, init);
+    MH::Evolutionary::evolution(Einstance, MA, init);
     
     return 0;
 }
 
-std::vector<std::vector<uint16_t>> PFSPparse_data(std::fstream &file) {
-    uint16_t num_tasks, num_machines;
-    file >> num_tasks >> num_machines;
+std::vector<std::vector<uint16_t>> PFSPParseData(std::fstream &file) {
+    uint16_t numJobs, numMachines;
+    file >> numJobs >> numMachines;
     file.ignore(std::numeric_limits<int64_t>::max(), '\n');
 
-    Table time_table(num_machines);
-    for(auto &row : time_table) {
-        row.resize(num_tasks);
+    Table timeTable(numMachines);
+    for(auto &row : timeTable) {
+        row.resize(numJobs);
         for(auto &entry : row) {
             file >> entry;
         }
     }
-    return time_table;
+    return timeTable;
 }
 
-std::vector<Permutation> PFSPneighbors(Permutation &perm) {
+std::vector<Permutation> PFSPSwapNeighbourhood(Permutation &perm) {
     static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
-    std::vector<Permutation> neighbors(perm.size() - 1);
+    std::vector<Permutation> neighbours(perm.size() - 1);
     uint16_t count = 0;
-    for(auto &neighbor : neighbors) {
-        neighbor.resize(perm.size());
-        std::copy(perm.begin(), perm.end(), neighbor.begin());
-        std::swap(neighbor[count], neighbor.back());
+    for(auto &neighbour : neighbours) {
+        neighbour.resize(perm.size());
+        std::copy(perm.begin(), perm.end(), neighbour.begin());
+        std::swap(neighbour[count], neighbour.back());
         ++count;
     }
     // std::random_shuffle() is deprecated
-    std::shuffle(neighbors.begin(), neighbors.end(), eng);
-    return neighbors;
+    std::shuffle(neighbours.begin(), neighbours.end(), eng);
+    return neighbours;
 }
 
-double PFSPmakespan(Permutation &perm, void *inf) {
-    Table time_table = *reinterpret_cast<Table *>(inf);
-    auto num_machines = time_table.size();
-    auto num_tasks = time_table.front().size();
-    std::vector<uint32_t> makespan_table(num_tasks);
+double PFSPMakespan(Permutation &perm, void *inf) {
+    Table timeTable = *reinterpret_cast<Table *>(inf);
+    auto numMachines = timeTable.size();
+    auto numJobs = timeTable.front().size();
+    std::vector<uint32_t> makespanTable(numJobs);
 
-    for(size_t machine_idx = 0; machine_idx < num_machines; ++machine_idx) {
-        makespan_table[0] += time_table[machine_idx][perm[0] - 1];
-        for(size_t task_idx = 1; task_idx < num_tasks; ++task_idx) {
-            makespan_table[task_idx] = makespan_table[task_idx] < makespan_table[task_idx - 1] ?
-                makespan_table[task_idx - 1] + time_table[machine_idx][perm[task_idx] - 1] :
-                makespan_table[task_idx] + time_table[machine_idx][perm[task_idx] - 1];
+    for(size_t machineIdx = 0; machineIdx < numMachines; ++machineIdx) {
+        makespanTable[0] += timeTable[machineIdx][perm[0] - 1];
+        for(size_t taskIdx = 1; taskIdx < numJobs; ++taskIdx) {
+            makespanTable[taskIdx] = makespanTable[taskIdx] < makespanTable[taskIdx - 1] ?
+                makespanTable[taskIdx - 1] + timeTable[machineIdx][perm[taskIdx] - 1] :
+                makespanTable[taskIdx] + timeTable[machineIdx][perm[taskIdx] - 1];
         }
     }
-    return makespan_table.back();
+    return makespanTable.back();
 }
 
-inline double PFSPcooling(double temperature) {
+inline double PFSPCooling(double temperature) {
     return temperature * 0.95;
 }
 
-inline Permutation PFSPconvert(Permutation &encoding, void *) {
+inline Permutation PFSPConvert(Permutation &encoding, void *) {
     return encoding;
 }
 
