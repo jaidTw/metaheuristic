@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cfloat>
 #include <numeric>
 #include <cmath>
 #include <iostream>
@@ -23,6 +24,17 @@ namespace MH {
         friend bool operator<(Solution<Encoding> &a, Solution<Encoding> &b) {
             return a.score < b.score;
         }
+        friend bool operator==(Solution<Encoding> &a, Solution<Encoding> &b) {
+            if(a.score != b.score || a.encoding.size() != b.encoding.size()) {
+                return false;
+            }
+            for(size_t i = 0; i < a.encoding.size(); ++i) {
+                if(a.encoding[i] != b.encoding[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
         // Solution encoding
         Encoding encoding;
         // Evaluation result
@@ -37,6 +49,23 @@ namespace MH {
     // and population in evolutionary algorithms
     template <typename Encoding>
     using SolCollection = std::vector<Solution<Encoding>>;
+
+    // Replaces duplicate solutions with random ones.
+    template <typename Encoding, typename Instance>
+    inline void replaceDuplicates(SolCollection<Encoding> &solutions, Instance &instance) {
+        static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        for(size_t i = 0; i < solutions.size(); ++i) {
+            for(size_t j = i + 1; j < solutions.size(); ++j) {
+                if(solutions[i].score == solutions[j].score) {
+                    if(solutions[i] == solutions[j]) {
+                        std::iota(solutions[j].encoding.begin(), solutions[j].encoding.end(), 1);
+                        std::shuffle(solutions[j].encoding.begin(), solutions[j].encoding.end(), eng);
+                        solutions[j].score = instance.evaluate(solutions[j].encoding, instance.inf);
+                    }
+                }
+            }
+        }
+    }
 
     namespace Trajectory {
 
@@ -58,6 +87,13 @@ namespace MH {
         // II< II_BestImproving | II_FirstImproving | II_Stochastic >
         template <typename Strategy>
         struct II {
+            II(size_t theGenerationLimit) :
+            generationLimit(theGenerationLimit),
+            prevScore(DBL_MAX) {}
+            
+            size_t generationLimit;
+            double score;
+            double prevScore;
             Strategy strategy;
         };
 
@@ -149,7 +185,14 @@ namespace MH {
 
         // crossover strategies
         class OP {}; // one-point crossover
-        class SJOX {}; // similar job order crossover
+        // TODO: class SJOX {}; // similar job order crossover
+        class OX {}; // order crossover
+        // TODO: class LOX {}; // linear order crossover
+        class PMX {}; // partially-mapped crossover
+        // TODO: class CX {}; // cycle crossover
+
+        // mutation strategies
+        class Shift {};
 
         // DE selection strategies
         class DE_Random {};
@@ -175,21 +218,33 @@ namespace MH {
 
         template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
         struct MA {
-            MA(size_t populationSize, size_t theNumJobs, LocalSearch &theLocalSearch, LSInstance &theLSInstance) :
+            MA(size_t thePopulationSize,
+               size_t theNumJobs,
+               bool theElitism,
+               bool theRemoveDuplicates,
+               double theMutationProbability,
+               LocalSearch &theLocalSearch,
+               LSInstance &theLSInstance) :
                 offspringAreParents(false),
+                elitism(theElitism),
+                removeDuplicates(theRemoveDuplicates),
+                mutationProbability(theMutationProbability),
                 localSearch(theLocalSearch),
                 lsInstance(theLSInstance) {
-                offspring.resize(populationSize);
+                offspring.resize(thePopulationSize);
                 for(auto &elem : offspring) {
                     elem.encoding.resize(theNumJobs);
                 }
             }
             bool offspringAreParents;
+            bool elitism;
+            bool removeDuplicates;
+            double mutationProbability; // Should be between 0 and 1, inclusive.
+            LocalSearch localSearch;
+            LSInstance lsInstance;
             SolCollection<Encoding> offspring;
             Selection selectionStrategy;
             Crossover crossoverStrategy;
-            LocalSearch localSearch;
-            LSInstance lsInstance;
         };
 
         template <typename FP>
@@ -205,6 +260,7 @@ namespace MH {
             // Neighbourhood generator: accepts an encoding and returns a vector of neighbourhood encodings.
             std::vector<Encoding> (*neighbourhood)(Encoding &);
             double (*evaluate)(Encoding &, void *);
+            void (*mutate)(Encoding &, double);
         };
 
         template <typename FP>
@@ -259,7 +315,13 @@ namespace MH {
         inline size_t mateSelect(SolCollection<Encoding> &, Tournament &);
 
         template <typename Encoding>
-        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, OP &);
+        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, OP &);
+
+        template <typename Encoding>
+        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, OX &);
+
+        template <typename Encoding>
+        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, PMX &);
 
         template <typename Encoding, typename Selection, typename Crossover> 
         Encoding DE_mate(Encoding &, SolCollection<Encoding> &, DE<Selection, Crossover> &);
@@ -317,9 +379,9 @@ MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
     auto current = Solution<Encoding>(init, instance.evaluate(init, instance.inf));
     auto min = current;
 
-    for(uint64_t generation_count = 0;
-        generation_count < instance.generationLimit;
-        ++generation_count) {
+    for(uint64_t generationCount = 0;
+        generationCount < instance.generationLimit;
+        ++generationCount) {
 
         auto neighbours_encoding = instance.neighbourhood(current.encoding);
         MH::SolCollection<Encoding> neighbours(neighbours_encoding.size());
@@ -332,7 +394,6 @@ MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
 
         // Each algorithm differs as to its selection mechanism.
         current = MH::Trajectory::select(instance, current, neighbours, algorithm);
-        //std::cout << "Generation " << generation_count << " : " << current.score << std::endl;
         if(current < min) {
             min = current;
         }
@@ -340,12 +401,14 @@ MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
     return min;
 }
 
-// Initialise II: nothing to do here.
+// Initialise II.
 template <typename Encoding, typename Strategy>
 inline void
-MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &,
-                           MH::Trajectory::II<Strategy> &,
+MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &instance,
+                           MH::Trajectory::II<Strategy> &ii,
                            Encoding &) {
+    // Since II can update the generationLimit, it must be reset here.
+    instance.generationLimit = ii.generationLimit;
 }
 
 // Initialise SA: set the temperature and epoch length.
@@ -383,7 +446,18 @@ MH::Trajectory::select(MH::Trajectory::Instance<Encoding> &instance,
                        MH::Solution<Encoding> &current,
                        MH::SolCollection<Encoding> &neighbours,
                        MH::Trajectory::II<Strategy>& ii) {
-    return MH::Trajectory::select_II(instance, current, neighbours, ii.strategy);
+    auto &result = MH::Trajectory::select_II(instance, current, neighbours, ii.strategy);
+    ii.score = result.score;
+
+    // Stop the search if at a local optimum.
+    if(ii.score >= ii.prevScore) {
+        instance.generationLimit = 0;
+        ii.prevScore = DBL_MAX;
+    }
+    else {
+        ii.prevScore = ii.score;
+    }
+    return result;
 }
 
 // SA selection: call select_SA and handle the cooling schedule
@@ -484,9 +558,9 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
                             std::vector<Encoding> &init) {
     MH::Evolutionary::initialise(instance, algorithm, init);
     auto population = MH::Evolutionary::initialisePopulation(instance, init);
-    for(auto generation_count = 0UL;
-        generation_count < instance.generationLimit;
-        ++generation_count) {
+    for(auto generationCount = 0UL;
+        generationCount < instance.generationLimit;
+        ++generationCount) {
         MH::Evolutionary::generate(instance, population, algorithm);
     }
     auto min = *std::min(population.begin(), population.end());
@@ -562,9 +636,24 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     auto &theOffspring = (ma.offspringAreParents) ? population : ma.offspring;
     for(size_t i = 0; i < population.size(); i += 2) {
         MH::Evolutionary::mate(instance, thePopulation, theOffspring[i], theOffspring[i + 1], ma);
+        // local search
+        theOffspring[i] = MH::Trajectory::search(ma.lsInstance, ma.localSearch, theOffspring[i].encoding);
+        theOffspring[i + 1] = MH::Trajectory::search(ma.lsInstance, ma.localSearch, theOffspring[i + 1].encoding);
     }
-    // local search
-    MH::Trajectory::search(ma.lsInstance, ma.localSearch, thePopulation[0].encoding);
+
+    // elitism
+    if(ma.elitism) {
+        auto min = std::min_element(thePopulation.begin(), thePopulation.end());
+        auto max = std::max_element(theOffspring.begin(), theOffspring.end());
+        *max = *min;
+    }
+    
+    // Remove duplicates to avoid early convergence to a local optimum.
+    if(ma.removeDuplicates) {
+        replaceDuplicates(theOffspring, instance);
+    }
+
+    // Let ma.offspring and population take turns acting as the parents.
     ma.offspringAreParents = !ma.offspringAreParents;
 }
 
@@ -580,7 +669,7 @@ MH::Evolutionary::mate(Instance<Encoding> &instance,
     while(parent2 == parent1) {
         parent2 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
     }
-    MH::Evolutionary::crossover(instance, population[parent1], population[parent2], offspring1, offspring2, ma.crossoverStrategy);
+    MH::Evolutionary::crossover(instance, population[parent1], population[parent2], offspring1, offspring2, ma.mutationProbability, ma.crossoverStrategy);
 }
 
 template <typename Encoding>
@@ -588,7 +677,7 @@ inline size_t
 MH::Evolutionary::mateSelect(MH::SolCollection<Encoding> &population,
                              MH::Evolutionary::Tournament &tournament) {
     // random number generator
-    static std::minstd_rand0 eng(std::chrono::system_clock::now().time_since_epoch().count());
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     
     std::vector<size_t> contestants;
     for(size_t i = 0; i < tournament.size; ++i) {
@@ -612,9 +701,10 @@ MH::Evolutionary::crossover(Instance<Encoding> &instance,
                             MH::Solution<Encoding> &parent2,
                             MH::Solution<Encoding> &offspring1,
                             MH::Solution<Encoding> &offspring2,
+                            double mutationProbability,
                             MH::Evolutionary::OP &) {
     // random number generator
-    static std::minstd_rand0 eng(std::chrono::system_clock::now().time_since_epoch().count());
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
 
     size_t size = parent1.encoding.size();
     std::vector<bool> knockout1(size, false), knockout2(size, false);
@@ -625,12 +715,131 @@ MH::Evolutionary::crossover(Instance<Encoding> &instance,
         offspring2.encoding[i] = parent2.encoding[i];
         knockout2[parent2.encoding[i] - 1] = true;
     }
-    size_t of1Index = crossoverPoint;
-    size_t of2Index = crossoverPoint;
+    size_t off1Index = crossoverPoint;
+    size_t off2Index = crossoverPoint;
     for(size_t i = 0; i < size; ++i) {
-        if(!knockout1[parent2.encoding[i] - 1]) offspring1.encoding[of1Index++] = parent2.encoding[i];
-        if(!knockout2[parent1.encoding[i] - 1]) offspring2.encoding[of2Index++] = parent1.encoding[i];
+        if(!knockout1[parent2.encoding[i] - 1]) offspring1.encoding[off1Index++] = parent2.encoding[i];
+        if(!knockout2[parent1.encoding[i] - 1]) offspring2.encoding[off2Index++] = parent1.encoding[i];
     }
+    instance.mutate(offspring1.encoding, mutationProbability);
+    instance.mutate(offspring2.encoding, mutationProbability);
+    offspring1.score = instance.evaluate(offspring1.encoding, instance.inf);
+    offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
+}
+
+// OX: encoding is limited to job indices.
+template <typename Encoding>
+inline void
+MH::Evolutionary::crossover(Instance<Encoding> &instance,
+                            MH::Solution<Encoding> &parent1,
+                            MH::Solution<Encoding> &parent2,
+                            MH::Solution<Encoding> &offspring1,
+                            MH::Solution<Encoding> &offspring2,
+                            double mutationProbability,
+                            MH::Evolutionary::OX &) {
+    // random number generator
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+
+    size_t size = parent1.encoding.size();
+    std::vector<bool> knockout1(size, false), knockout2(size, false);
+    size_t crossoverPointA = eng() % (size - 1);
+    size_t crossoverPointB = eng() % (size - crossoverPointA - 1) + crossoverPointA + 1;
+    for(size_t i = crossoverPointA; i < crossoverPointB; ++i) {
+        offspring1.encoding[i] = parent1.encoding[i];
+        knockout1[parent1.encoding[i] - 1] = true;
+        offspring2.encoding[i] = parent2.encoding[i];
+        knockout2[parent2.encoding[i] - 1] = true;
+    }
+    size_t off1Index = 0;
+    size_t off2Index = 0;
+    for(size_t i = 0; i < size; ++i) {
+        if(off1Index == crossoverPointA) {
+            off1Index = crossoverPointB;
+        }
+        if(!knockout1[parent2.encoding[i] - 1]) {
+            offspring1.encoding[off1Index++] = parent2.encoding[i];
+        }
+        if(off2Index == crossoverPointA) {
+            off2Index = crossoverPointB;
+        }
+        if(!knockout2[parent1.encoding[i] - 1]) {
+            offspring2.encoding[off2Index++] = parent1.encoding[i];
+        }
+    }
+    instance.mutate(offspring1.encoding, mutationProbability);
+    instance.mutate(offspring2.encoding, mutationProbability);
+    offspring1.score = instance.evaluate(offspring1.encoding, instance.inf);
+    offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
+}
+
+// PMX: encoding is limited to job indices.
+template<typename Encoding>
+size_t PMXHelper(MH::Solution<Encoding> &parent1,
+                 MH::Solution<Encoding> &parent2,
+                 MH::Solution<Encoding> &offspring,
+                 size_t crossoverPointA,
+                 size_t crossoverPointB,
+                 size_t searchIndex,
+                 size_t valueIndex) {
+    size_t i;
+    for(i = 0; i < parent1.encoding.size(); ++i) {
+        if(parent2.encoding[i] == parent1.encoding[searchIndex]) {
+            break;
+        }
+    }
+    if(i >= crossoverPointA && i < crossoverPointB) {
+        i = PMXHelper(parent1, parent2, offspring, crossoverPointA, crossoverPointB, i, valueIndex);
+    }
+    else {
+        offspring.encoding[i] = parent2.encoding[valueIndex];
+    }
+    return i;
+}
+
+template <typename Encoding>
+inline void
+MH::Evolutionary::crossover(Instance<Encoding> &instance,
+                            MH::Solution<Encoding> &parent1,
+                            MH::Solution<Encoding> &parent2,
+                            MH::Solution<Encoding> &offspring1,
+                            MH::Solution<Encoding> &offspring2,
+                            double mutationProbability,
+                            MH::Evolutionary::PMX &) {
+    // random number generator
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+
+    size_t size = parent1.encoding.size();
+    std::vector<bool> knockout1(size, false), knockout2(size, false);
+    std::fill(offspring1.encoding.begin(), offspring1.encoding.end(), 0);
+    std::fill(offspring2.encoding.begin(), offspring2.encoding.end(), 0);
+    size_t crossoverPointA = eng() % (size - 1);
+    size_t crossoverPointB = eng() % (size - crossoverPointA - 1) + crossoverPointA + 1;
+    for(size_t i = crossoverPointA; i < crossoverPointB; ++i) {
+        offspring1.encoding[i] = parent1.encoding[i];
+        knockout1[parent1.encoding[i] - 1] = true;
+        offspring2.encoding[i] = parent2.encoding[i];
+        knockout2[parent2.encoding[i] - 1] = true;
+    }
+    for(size_t i = crossoverPointA; i < crossoverPointB; ++i) {
+        if(!knockout1[parent2.encoding[i] - 1]) {
+            PMXHelper(parent1, parent2, offspring1, crossoverPointA, crossoverPointB, i, i);
+            knockout1[parent2.encoding[i] - 1] = true;
+        }
+        if(!knockout2[parent1.encoding[i] - 1]) {
+            PMXHelper(parent2, parent1, offspring2, crossoverPointA, crossoverPointB, i, i);
+            knockout2[parent1.encoding[i] - 1] = true;
+        }
+    }
+    for(size_t i = 0; i < size; ++i) {
+        if(offspring1.encoding[i] == 0) {
+            offspring1.encoding[i] = parent2.encoding[i];
+        }
+        if(offspring2.encoding[i] == 0) {
+            offspring2.encoding[i] = parent1.encoding[i];
+        }
+    }
+    instance.mutate(offspring1.encoding, mutationProbability);
+    instance.mutate(offspring2.encoding, mutationProbability);
     offspring1.score = instance.evaluate(offspring1.encoding, instance.inf);
     offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
 }
