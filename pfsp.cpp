@@ -46,23 +46,24 @@ int main(int argc, char** argv) {
     std::cout << "Number of jobs: " << numJobs << std::endl;
     std::cout << "Number of machines: " << numMachines << std::endl;
     
-/*
-    // Configure problem instance for trajectory based metaheuristics.
-    auto Tinstance = MH::Trajectory::Instance<Permutation>();
-    Tinstance.generationLimit = 3000;
-    Tinstance.neighbourhood = PFSPSwapNeighbourhood;
-    Tinstance.evaluate = PFSPMakespan;
-    Tinstance.inf = reinterpret_cast<void *>(&timeTable);
+    // Configure problem instance for trajectory-based metaheuristics.
+    auto TInstance = MH::Trajectory::Instance<Permutation>();
+    TInstance.generationLimit = 3000;
+    TInstance.neighbourhood = PFSPSwapNeighbourhood;
+    TInstance.evaluate = PFSPMakespan;
+    TInstance.inf = reinterpret_cast<void *>(&timeTable);
     
     // II_FirstImproving | II_BestImproving | II_Stochastic
     auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
-    auto SA = MH::Trajectory::SimulatedAnnealing();
-    SA.init_temperature = 10000;
-    SA.epoch_length = 20;
-    auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
-    TS.length = 70;
-    TS.trait = PFSPConvert;
-    // Generate initial solution
+    //auto SA = MH::Trajectory::SimulatedAnnealing();
+    //SA.init_temperature = 10000;
+    //SA.epoch_length = 20;
+    //auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
+    //TS.length = 70;
+    //TS.trait = PFSPConvert;
+
+/*
+    // Generate initial solution for trajectory-based metaheuristics.
     Permutation init(numJobs);
     std::iota(init.begin(), init.end(), 1);
 */
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
     Einstance.inf = reinterpret_cast<void *>(&timeTable);
 
     // Configure a memetic algorithm.
-    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament, MH::Evolutionary::OP>(100, numJobs);
+    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament, MH::Evolutionary::OP, MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>, MH::Trajectory::Instance<Permutation>>(100, numJobs, II, TInstance);
     MA.selectionStrategy.size = 2;
 
     // random engine
@@ -105,7 +106,7 @@ int main(int argc, char** argv) {
     }
 */
 
-    //MH::Trajectory::search(Tinstance, TS, init);
+    //MH::Trajectory::search(TInstance, TS, init);
     MH::Evolutionary::evolution(Einstance, MA, init);
     
     return 0;
