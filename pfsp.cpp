@@ -13,15 +13,20 @@
 // aliases
 typedef std::vector<uint8_t> Permutation;
 typedef std::vector<std::vector<uint16_t>> Table;
+typedef std::chrono::high_resolution_clock Clock;
 
 std::vector<std::vector<uint16_t>> PFSPParseData(std::fstream&);
-std::vector<Permutation> PFSPSwapNeighbourhood(Permutation&);
-double PFSPMakespan(Permutation&, void*);
+std::vector<Permutation> PFSPInsertionNeighbourhoodSmall(Permutation&); // Supposedly preferable to swap.
+std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation&); // Slow.
+std::vector<Permutation> PFSPSwapNeighbourhoodSmall(Permutation&);
+void PFSPShiftMutationPerSolution(Permutation&, double);
+void PFSPShiftMutationPerJob(Permutation&, double); // Terrible. Do not use.
+double PFSPMakespan(Permutation&, void*); // Naïve algorithm. A faster version should be written for evaluating neighbourhoods.
 Permutation PFSPConvert(Permutation &encoding, void *);
 double DETest(std::vector<double> &, void *);
 
 int main(int argc, char** argv) {
-    if(argc < 2) {
+    if(argc != 2) {
         std::cerr << "Usage: ./pfsp [test_data]" << std::endl;
         exit(-1);
     }
@@ -49,18 +54,38 @@ int main(int argc, char** argv) {
     // Configure problem instance for trajectory-based metaheuristics.
     auto TInstance = MH::Trajectory::Instance<Permutation>();
     TInstance.generationLimit = 3000;
-    TInstance.neighbourhood = PFSPSwapNeighbourhood;
+    TInstance.neighbourhood = PFSPInsertionNeighbourhoodSmall;
     TInstance.evaluate = PFSPMakespan;
     TInstance.inf = reinterpret_cast<void *>(&timeTable);
     
     // II_FirstImproving | II_BestImproving | II_Stochastic
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
-    //auto SA = MH::Trajectory::SimulatedAnnealing();
-    //SA.init_temperature = 10000;
-    //SA.epoch_length = 20;
-    //auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
-    //TS.length = 70;
-    //TS.trait = PFSPConvert;
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>(TInstance.generationLimit);
+    auto SA = MH::Trajectory::SimulatedAnnealing();
+    SA.init_temperature = 10000;
+    SA.epoch_length = 20;
+    auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
+    TS.length = 70;
+    TS.trait = PFSPConvert;
+
+    // Configure the problem instance for evolutionary algorithms.
+    auto EInstance = MH::Evolutionary::Instance<Permutation>();
+    EInstance.generationLimit = 700;
+    EInstance.evaluate = PFSPMakespan;
+    EInstance.mutate = PFSPShiftMutationPerSolution;
+    EInstance.inf = reinterpret_cast<void *>(&timeTable);
+
+    // Configure a memetic algorithm.
+    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation,
+                MH::Evolutionary::Tournament,
+                MH::Evolutionary::OP,
+                MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>,
+                    MH::Trajectory::Instance<Permutation>>
+                (100, numJobs, true, true, 0.6, II, TInstance);
+    // tournament size
+    MA.selectionStrategy.size = 5;
+
+    // random engine
+    std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 
 /*
     // Generate initial solution for trajectory-based metaheuristics.
@@ -68,21 +93,8 @@ int main(int argc, char** argv) {
     std::iota(init.begin(), init.end(), 1);
 */
 
-    // Configure the problem instance for evolutionary algorithms.
-    auto Einstance = MH::Evolutionary::Instance<Permutation>();
-    Einstance.generationLimit = 7000;
-    Einstance.evaluate = PFSPMakespan;
-    Einstance.inf = reinterpret_cast<void *>(&timeTable);
-
-    // Configure a memetic algorithm.
-    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament, MH::Evolutionary::OP, MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>, MH::Trajectory::Instance<Permutation>>(100, numJobs, II, TInstance);
-    MA.selectionStrategy.size = 2;
-
-    // random engine
-    std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
-
     // Generate initial population.
-    std::vector<Permutation> init(100);
+    std::vector<Permutation> init(MA.offspring.size());
     for(auto &sol : init) {
         sol.resize(numJobs);
         std::iota(sol.begin(), sol.end(), 1);
@@ -106,8 +118,14 @@ int main(int argc, char** argv) {
     }
 */
 
-    //MH::Trajectory::search(TInstance, TS, init);
-    MH::Evolutionary::evolution(Einstance, MA, init);
+    auto start = Clock::now();
+    //auto result = MH::Trajectory::search(TInstance, TS, init);
+    auto result = MH::Evolutionary::evolution(EInstance, MA, init);
+    std::cout << "\nFinal score: " << result.score << ".\n";
+    std::cout << "花費的時間：";
+    auto end = Clock::now();
+    std::chrono::duration<double, std::milli> duration = end - start;
+    std::cout << duration.count() / 1000.0 << "秒。\n";
     
     return 0;
 }
@@ -127,7 +145,7 @@ std::vector<std::vector<uint16_t>> PFSPParseData(std::fstream &file) {
     return timeTable;
 }
 
-std::vector<Permutation> PFSPSwapNeighbourhood(Permutation &perm) {
+std::vector<Permutation> PFSPSwapNeighbourhoodSmall(Permutation &perm) {
     static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
     std::vector<Permutation> neighbours(perm.size() - 1);
     uint16_t count = 0;
@@ -137,9 +155,87 @@ std::vector<Permutation> PFSPSwapNeighbourhood(Permutation &perm) {
         std::swap(neighbour[count], neighbour.back());
         ++count;
     }
-    // std::random_shuffle() is deprecated
     std::shuffle(neighbours.begin(), neighbours.end(), eng);
     return neighbours;
+}
+
+std::vector<Permutation> PFSPInsertionNeighbourhoodSmall(Permutation &perm) {
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    std::vector<Permutation> neighbours(perm.size() - 1);
+    uint16_t count = 0;
+    for(auto &neighbour : neighbours) {
+        neighbour.resize(perm.size());
+        std::copy(perm.begin(), perm.end(), neighbour.begin());
+        neighbour.insert(neighbour.begin() + count, neighbour.back());
+        neighbour.erase(neighbour.end() - 1);
+        ++count;
+    }
+    std::shuffle(neighbours.begin(), neighbours.end(), eng);
+    return neighbours;
+}
+
+std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation &perm) {
+    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    std::vector<Permutation> neighbours((perm.size() - 1) * perm.size());
+    size_t index = 0;
+    for(size_t i = 0; i < perm.size(); ++i) {
+        for(size_t j = i + 1; j < perm.size(); ++j) {
+            neighbours[index].resize(perm.size());
+            std::copy(perm.begin(), perm.end(), neighbours[index].begin());
+            neighbours[index].insert(neighbours[index].begin() + j, neighbours[index][i]);
+            neighbours[index].erase(neighbours[index].begin() + i); 
+            ++index;
+        }
+    }
+    for(size_t i = 0; i < perm.size(); ++i) {
+        for(size_t j = i + 1; j < perm.size(); ++j) {
+            neighbours[index].resize(perm.size());
+            std::copy(perm.begin(), perm.end(), neighbours[index].begin());
+            neighbours[index].insert(neighbours[index].end() - j, neighbours[index][perm.size() - i - 1]);
+            neighbours[index].erase(neighbours[index].end() - i - 1); 
+            ++index;
+        }
+    }
+    std::shuffle(neighbours.begin(), neighbours.end(), eng);
+    return neighbours;
+}
+
+void PFSPShiftMutationPerSolution(Permutation &perm, double mutationProbability) {
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+    double random;
+    random = (double)eng() / (double)eng.max();
+    if(random < mutationProbability) {
+        size_t oldPos = eng() % perm.size();
+        size_t newPos;
+        do {
+            newPos = eng() % perm.size();
+        } while(newPos == oldPos);
+        perm.insert(perm.begin() + newPos, perm[oldPos]);
+        if(newPos > oldPos) {
+            perm.erase(perm.begin() + oldPos);
+        }
+        else {
+            perm.erase(perm.begin() + oldPos + 1);
+        }
+    }
+}
+
+void PFSPShiftMutationPerJob(Permutation &perm, double mutationProbability) {
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+    double random;
+    for(size_t i = 0; i < perm.size(); ++i) {
+        random = (double)eng() / (double)eng.max();
+        if(random < mutationProbability) {
+            size_t newPos = eng() % perm.size();
+            perm.insert(perm.begin() + newPos, perm[i]);
+            if(newPos > i) {
+                perm.erase(perm.begin() + i);
+            }
+            else {
+                perm.erase(perm.begin() + i + 1);
+            }
+        }
+    }
 }
 
 double PFSPMakespan(Permutation &perm, void *inf) {
