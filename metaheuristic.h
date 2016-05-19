@@ -33,7 +33,7 @@ namespace MH {
         Solution(Encoding &, double);
     };
 
-    // This collection will serve as the neighbors collection in trajectory algorithms,
+    // This collection will serve as the neighbours collection in trajectory algorithms,
     // and population in evolutionary algorithms
     template <typename Encoding>
     using SolCollection = std::vector<Solution<Encoding>>;
@@ -173,19 +173,23 @@ namespace MH {
             Crossover crossover_strategy;
         };
 
-        template <typename Encoding, typename Selection, typename Crossover>
+        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
         struct MA {
-            MA(size_t populationSize, size_t numJobs) :
-                offspringAreParents(false) {
+            MA(size_t populationSize, size_t theNumJobs, LocalSearch &theLocalSearch, LSInstance &theLSInstance) :
+                offspringAreParents(false),
+                localSearch(theLocalSearch),
+                lsInstance(theLSInstance) {
                 offspring.resize(populationSize);
                 for(auto &elem : offspring) {
-                    elem.encoding.resize(numJobs);
+                    elem.encoding.resize(theNumJobs);
                 }
             }
             bool offspringAreParents;
             SolCollection<Encoding> offspring;
             Selection selectionStrategy;
             Crossover crossoverStrategy;
+            LocalSearch localSearch;
+            LSInstance lsInstance;
         };
 
         template <typename FP>
@@ -219,8 +223,8 @@ namespace MH {
         // aliases
         template <typename Selection, typename Crossover>
         using DifferentialEvolution = DE<Selection, Crossover>;
-        template <typename Encoding, typename Selection, typename Crossover>
-        using MemeticAlgorithm = MA<Encoding, Selection, Crossover>;
+        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+        using MemeticAlgorithm = MA<Encoding, Selection, Crossover, LocalSearch, LSInstance>;
 
         // Function definitions
         template <typename FP, typename Selection, typename Crossover>
@@ -233,8 +237,8 @@ namespace MH {
         template <typename Encoding, typename Selection, typename Crossover>
         void initialise(Instance<Encoding> &, DE<Selection, Crossover> &, std::vector<Encoding> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
-        void initialise(Instance<Encoding> &, MA<Encoding, Selection, Crossover> &, std::vector<Encoding> &);
+        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+        void initialise(Instance<Encoding> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &, std::vector<Encoding> &);
 
         template <typename Encoding>
         SolCollection<Encoding> initialisePopulation(Instance<Encoding> &, std::vector<Encoding> &);
@@ -242,14 +246,14 @@ namespace MH {
         template <typename Encoding, typename Selection, typename Crossover>
         void generate(Instance<Encoding> &, SolCollection<Encoding> &, DE<Selection, Crossover> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
-        void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, Selection, Crossover> &);
+        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+        void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
-        inline void generate(Instance<Encoding> &, std::vector<Solution<Encoding>> &, MA<Encoding, Selection, Crossover> &);
+        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+        inline void generate(Instance<Encoding> &, std::vector<Solution<Encoding>> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
-        inline void mate(Instance<Encoding> &instance, SolCollection<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, MA<Encoding, Selection, Crossover> &);
+        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+        inline void mate(Instance<Encoding> &instance, SolCollection<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &);
 
         template <typename Encoding>
         inline size_t mateSelect(SolCollection<Encoding> &, Tournament &);
@@ -317,23 +321,22 @@ MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
         generation_count < instance.generationLimit;
         ++generation_count) {
 
-        auto neighbors_encoding = instance.neighbourhood(current.encoding);
-        MH::SolCollection<Encoding> neighbors(neighbors_encoding.size());
+        auto neighbours_encoding = instance.neighbourhood(current.encoding);
+        MH::SolCollection<Encoding> neighbours(neighbours_encoding.size());
         // Evaluate each encoding, and store in the solution vector.
-        std::transform(neighbors_encoding.begin(), neighbors_encoding.end(),
-                       neighbors.begin(),
+        std::transform(neighbours_encoding.begin(), neighbours_encoding.end(),
+                       neighbours.begin(),
                        [&](auto &e) {
                            return Solution<Encoding>(e, instance.evaluate(e, instance.inf));
                        });
 
-        // each algorithm is different on there selection
-        current = MH::Trajectory::select(instance, current, neighbors, algorithm);
+        // Each algorithm differs as to its selection mechanism.
+        current = MH::Trajectory::select(instance, current, neighbours, algorithm);
         //std::cout << "Generation " << generation_count << " : " << current.score << std::endl;
         if(current < min) {
             min = current;
         }
     }
-    std::cout << "Final value = " << min.score << std::endl;
     return min;
 }
 
@@ -343,7 +346,6 @@ inline void
 MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &,
                            MH::Trajectory::II<Strategy> &,
                            Encoding &) {
-    std::cout << "Starting iterative improvement..." << std::endl;
 }
 
 // Initialise SA: set the temperature and epoch length.
@@ -352,7 +354,6 @@ inline void
 MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &,
                            MH::Trajectory::SA &sa,
                            Encoding &) {
-    std::cout << "Starting simulated annealing..." << std::endl;
     sa.temperature = sa.init_temperature;
     sa.epoch_count = 0;
 }
@@ -363,7 +364,6 @@ inline void
 MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &instance,
                            MH::Trajectory::TS<Encoding, TraitType> &ts,
                            Encoding & init) {
-    std::cout << "Starting tabu search..." << std::endl;
     ts.queue.resize(ts.length);
     std::fill(ts.queue.begin(), ts.queue.end(), ts.trait(init, instance.inf));
 }
@@ -374,7 +374,6 @@ inline void
 MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &,
                            MH::Trajectory::RS &,
                            Encoding &) {
-    std::cout << "Starting random search..." << std::endl;
 }
 
 // II selection: call select_II based on II strategy.
@@ -382,9 +381,9 @@ template <typename Encoding, typename Strategy>
 inline MH::Solution<Encoding> &
 MH::Trajectory::select(MH::Trajectory::Instance<Encoding> &instance,
                        MH::Solution<Encoding> &current,
-                       MH::SolCollection<Encoding> &neighbors,
+                       MH::SolCollection<Encoding> &neighbours,
                        MH::Trajectory::II<Strategy>& ii) {
-    return MH::Trajectory::select_II(instance, current, neighbors, ii.strategy);
+    return MH::Trajectory::select_II(instance, current, neighbours, ii.strategy);
 }
 
 // SA selection: call select_SA and handle the cooling schedule
@@ -392,9 +391,9 @@ template <typename Encoding>
 inline MH::Solution<Encoding> &
 MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &,
                        MH::Solution<Encoding> &current,
-                       MH::SolCollection<Encoding> &neighbors,
+                       MH::SolCollection<Encoding> &neighbours,
                        MH::Trajectory::SA &sa) {
-    auto &result = MH::Trajectory::select_SA(sa.temperature, current, neighbors);
+    auto &result = MH::Trajectory::select_SA(sa.temperature, current, neighbours);
     ++sa.epoch_count;
     if(sa.epoch_count == sa.epoch_length) {
         sa.temperature = sa.cooling(sa.temperature);
@@ -409,14 +408,14 @@ template <typename Encoding, typename TraitType>
 inline MH::Solution<Encoding> &
 MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &instance,
                        MH::Solution<Encoding> &,
-                       MH::SolCollection<Encoding> &neighbors,
+                       MH::SolCollection<Encoding> &neighbours,
                        MH::Trajectory::TS<Encoding, TraitType> &ts) {
-    auto &min = neighbors.front();
-    for(auto &neighbor : neighbors) {
+    auto &min = neighbours.front();
+    for(auto &neighbour : neighbours) {
         if(std::find(ts.queue.begin(), ts.queue.end(),
-                     ts.trait(neighbor.encoding, instance.inf)) == ts.queue.end() &&
-           neighbor < min) {
-            min = neighbor;
+                     ts.trait(neighbour.encoding, instance.inf)) == ts.queue.end() &&
+           neighbour < min) {
+            min = neighbour;
         }
     }
     ts.queue.pop_front();
@@ -429,9 +428,9 @@ template <typename Encoding>
 inline MH::Solution<Encoding> &
 MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
                           MH::Solution<Encoding> &current,
-                          MH::SolCollection<Encoding> &neighbors,
+                          MH::SolCollection<Encoding> &neighbours,
                           II_BestImproving &) {
-    auto &min = *std::min(neighbors.begin(), neighbors.end()); 
+    auto &min = *std::min(neighbours.begin(), neighbours.end()); 
     return (min < current) ? min : current;
 }
 
@@ -440,11 +439,11 @@ template <typename Encoding>
 inline MH::Solution<Encoding> &
 MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
                           MH::Solution<Encoding> &current,
-                          MH::SolCollection<Encoding> &neighbors,
+                          MH::SolCollection<Encoding> &neighbours,
                           II_FirstImproving &) {
-    for(auto &neighbor : neighbors) {
-        if(neighbor < current) {
-            return neighbor;
+    for(auto &neighbour : neighbours) {
+        if(neighbour < current) {
+            return neighbour;
         }
     }
     return current;
@@ -465,14 +464,14 @@ template <typename Encoding>
 inline MH::Solution<Encoding> &
 MH::Trajectory::select_SA(double temperature,
                            MH::Solution<Encoding> &current,
-                           MH::SolCollection<Encoding> &neighbors) {
+                           MH::SolCollection<Encoding> &neighbours) {
     // uniform random number generators
     static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
     static std::uniform_real_distribution<double> uniform;
-    for(auto &neighbor : neighbors) {
-        if((neighbor < current) ||
-           (exp(current.score - neighbor.score) / temperature > uniform(eng)) ) {
-            return neighbor;
+    for(auto &neighbour : neighbours) {
+        if((neighbour < current) ||
+           (exp(current.score - neighbour.score) / temperature > uniform(eng)) ) {
+            return neighbour;
         }
     }
     return current;
@@ -491,7 +490,6 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
         MH::Evolutionary::generate(instance, population, algorithm);
     }
     auto min = *std::min(population.begin(), population.end());
-    std::cout << "Final value = " << min.score << std::endl;
     return min;
 }
 
@@ -533,15 +531,13 @@ inline void
 MH::Evolutionary::initialise(MH::Evolutionary::Instance<Encoding> &,
                              MH::Evolutionary::DE<Selection, Crossover> &,
                              std::vector<Encoding> &) {
-    std::cout << "Starting differential evolution... " << std::endl;
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
 inline void
 MH::Evolutionary::initialise(MH::Evolutionary::Instance<Encoding> &,
-                             MH::Evolutionary::MA<Encoding, Selection, Crossover> &,
+                             MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &,
                              std::vector<Encoding> &) {
-    std::cout << "Starting memetic algorithm... " << std::endl;
 }
 
 template <typename Encoding>
@@ -557,31 +553,28 @@ MH::Evolutionary::initialisePopulation(MH::Evolutionary::Instance<Encoding> &ins
     return population;
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
 inline void
 MH::Evolutionary::generate(Instance<Encoding> &instance,
                            MH::SolCollection<Encoding> &population,
-                           MH::Evolutionary::MA<Encoding, Selection, Crossover> &ma) {
-    if(ma.offspringAreParents) {
-        for(size_t i = 0; i < population.size(); i += 2)  {
-            MH::Evolutionary::mate(instance, ma.offspring, population[i], population[i + 1], ma);
-        }
+                           MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &ma) {
+    auto &thePopulation = (ma.offspringAreParents) ? ma.offspring : population;
+    auto &theOffspring = (ma.offspringAreParents) ? population : ma.offspring;
+    for(size_t i = 0; i < population.size(); i += 2) {
+        MH::Evolutionary::mate(instance, thePopulation, theOffspring[i], theOffspring[i + 1], ma);
     }
-    else {
-        for(size_t i = 0; i < population.size(); i += 2)  {
-            MH::Evolutionary::mate(instance, population, ma.offspring[i], ma.offspring[i + 1], ma);
-        }
-    }
+    // local search
+    MH::Trajectory::search(ma.lsInstance, ma.localSearch, thePopulation[0].encoding);
     ma.offspringAreParents = !ma.offspringAreParents;
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
 inline void
 MH::Evolutionary::mate(Instance<Encoding> &instance,
                        MH::SolCollection<Encoding> &population,
                        MH::Solution<Encoding> &offspring1,
                        MH::Solution<Encoding> &offspring2,
-                       MH::Evolutionary::MA<Encoding, Selection, Crossover> &ma) {
+                       MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &ma) {
     auto parent1 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
     auto parent2 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
     while(parent2 == parent1) {
