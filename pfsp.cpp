@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
 */
 
     //MH::Trajectory::search(TInstance, TS, init);
-    MH::Evolutionary::evolution(Einstance, MA, init);
+    std::cout<<MH::Evolutionary::evolution(Einstance, MA, init).score<<std::endl;
     
     return 0;
 }
