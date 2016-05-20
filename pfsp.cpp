@@ -10,6 +10,8 @@
 #include <vector>
 #include <chrono>
 
+inline double PFSPCooling(double temperature);
+
 // aliases
 typedef std::vector<uint8_t> Permutation;
 typedef std::vector<std::vector<uint16_t>> Table;
@@ -45,23 +47,31 @@ int main(int argc, char** argv) {
     std::cout << "Done." << std::endl;
     std::cout << "Number of jobs: " << numJobs << std::endl;
     std::cout << "Number of machines: " << numMachines << std::endl;
-    
+
     // Configure problem instance for trajectory-based metaheuristics.
     auto TInstance = MH::Trajectory::Instance<Permutation>();
     TInstance.generationLimit = 3000;
     TInstance.neighbourhood = PFSPSwapNeighbourhood;
     TInstance.evaluate = PFSPMakespan;
     TInstance.inf = reinterpret_cast<void *>(&timeTable);
-    
-    // II_FirstImproving | II_BestImproving | II_Stochastic
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
-    //auto SA = MH::Trajectory::SimulatedAnnealing();
-    //SA.init_temperature = 10000;
-    //SA.epoch_length = 20;
-    //auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
-    //TS.length = 70;
-    //TS.trait = PFSPConvert;
 
+    // II_FirstImproving | II_BestImproving | II_Stochastic
+#ifdef USE_II_FI
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
+#elif USE_II_BI
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_BestImproving>();
+#elif USE_II_SC
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_Stochastic>();
+#elif USE_SA
+    auto SA = MH::Trajectory::SimulatedAnnealing();
+    SA.init_temperature = 10000;
+    SA.cooling = PFSPCooling;
+    SA.epoch_length = 20;
+#elif USE_TS
+    auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
+    TS.length = 70;
+    TS.trait = PFSPConvert;
+#endif // USE_II
 /*
     // Generate initial solution for trajectory-based metaheuristics.
     Permutation init(numJobs);
@@ -75,7 +85,32 @@ int main(int argc, char** argv) {
     Einstance.inf = reinterpret_cast<void *>(&timeTable);
 
     // Configure a memetic algorithm.
-    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament, MH::Evolutionary::OP, MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>, MH::Trajectory::Instance<Permutation>>(100, numJobs, II, TInstance);
+    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament,
+#ifdef USE_OP
+        MH::Evolutionary::OP,
+#elif UES_SJOX
+        MH::Evolutionary::SJOX,
+#endif // USE_OP
+#ifdef USE_II_FI
+        MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>,
+#elif USE_II_BI
+        MH::Trajectory::IterativeImprovement<MH::Trajectory::II_BestImproving>,
+#elif USE_II_SC
+        MH::Trajectory::IterativeImprovement<MH::Trajectory::II_Stochastic>,
+#elif USE_SA
+        MH::Trajectory::SimulatedAnnealing,
+#elif USE_TS
+        MH::Trajectory::TabuSearch,
+#endif // USE_II_FI
+        MH::Trajectory::Instance<Permutation>>(100, numJobs,
+#if defined(USE_II_FI) || defined(USE_II_BI) || defined(USE_II_SC)
+            II,
+#elif USE_SA
+            SA,
+#elif USE_TS
+            TS,
+#endif // USE_SA
+            TInstance);
     MA.selectionStrategy.size = 2;
 
     // random engine
@@ -88,7 +123,7 @@ int main(int argc, char** argv) {
         std::iota(sol.begin(), sol.end(), 1);
         std::shuffle(sol.begin(), sol.end(), eng);
     }
-    
+
 /*
     auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Binomial>();
     DE.crossover_rate = 0.6;
@@ -108,7 +143,7 @@ int main(int argc, char** argv) {
 
     //MH::Trajectory::search(TInstance, TS, init);
     std::cout<<MH::Evolutionary::evolution(Einstance, MA, init).score<<std::endl;
-    
+
     return 0;
 }
 
