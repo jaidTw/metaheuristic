@@ -54,18 +54,18 @@ int main(int argc, char** argv) {
 
     // Configure problem instance for trajectory-based metaheuristics.
     auto TInstance = MH::Trajectory::Instance<Permutation>();
-    TInstance.generationLimit = 3000;
+    TInstance.generationLimit = 300;
     TInstance.neighbourhood = PFSPInsertionNeighbourhoodSmall;
     TInstance.evaluate = PFSPMakespan;
     TInstance.inf = reinterpret_cast<void *>(&timeTable);
 
     // II_FirstImproving | II_BestImproving | II_Stochastic
 #ifdef USE_II_FI
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>(TInstance.generationLimit);
 #elif USE_II_BI
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_BestImproving>();
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_BestImproving>(TInstance.generationLimit);
 #elif USE_II_SC
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_Stochastic>();
+    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_Stochastic>(TInstance.generationLimit);
 #elif USE_SA
     auto SA = MH::Trajectory::SimulatedAnnealing();
     SA.init_temperature = 10000;
@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
 #elif USE_SA
         MH::Trajectory::SimulatedAnnealing,
 #elif USE_TS
-        MH::Trajectory::TabuSearch,
+        MH::Trajectory::TabuSearch<Permutation,Permutation>,
 #endif // USE_II_FI
         MH::Trajectory::Instance<Permutation>>(100, numJobs,true,true,0.6,
 #if defined(USE_II_FI) || defined(USE_II_BI) || defined(USE_II_SC)
@@ -117,16 +117,6 @@ int main(int argc, char** argv) {
 #endif // USE_SA
             TInstance);
     MA.selectionStrategy.size = 2;
-/*=======
-    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation,
-                MH::Evolutionary::Tournament,
-                MH::Evolutionary::OP,
-                MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>,
-                    MH::Trajectory::Instance<Permutation>>
-                (100, numJobs, true, true, 0.6, II, TInstance);
-    // tournament size
-    MA.selectionStrategy.size = 5;
->>>>>>> bd3de46b6633066ad7b3386f0b322537564d5756*/
 
     // random engine
     std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
@@ -136,13 +126,23 @@ int main(int argc, char** argv) {
     Permutation init(numJobs);
     std::iota(init.begin(), init.end(), 1);
 */
-
     // Generate initial population.
     std::vector<Permutation> init(MA.offspring.size());
     for(auto &sol : init) {
         sol.resize(numJobs);
         std::iota(sol.begin(), sol.end(), 1);
-        std::shuffle(sol.begin(), sol.end(), eng);
+        //std::shuffle(sol.begin(), sol.end(), eng);
+        auto TrajectoryInstance = MH::Trajectory::Instance<Permutation>();
+        TrajectoryInstance.generationLimit = 300;
+        TrajectoryInstance.neighbourhood = PFSPSwapNeighbourhoodSmall;
+        TrajectoryInstance.evaluate = PFSPMakespan;
+        TrajectoryInstance.inf = reinterpret_cast<void *>(&timeTable);
+
+        auto sa = MH::Trajectory::SimulatedAnnealing();
+        sa.init_temperature = 10000;
+        sa.cooling = PFSPCooling;
+        sa.epoch_length = 20;
+        MH::Trajectory::search(TrajectoryInstance, sa, sol);
     }
 
 /*
@@ -171,7 +171,10 @@ int main(int argc, char** argv) {
     auto end = Clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
     std::cout << duration.count() / 1000.0 << "秒。\n";
-    
+    for (auto &e : result.encoding)
+        std::cout << (int)e << " ";
+
+
     return 0;
 }
 
@@ -228,7 +231,7 @@ std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation &perm) {
             neighbours[index].resize(perm.size());
             std::copy(perm.begin(), perm.end(), neighbours[index].begin());
             neighbours[index].insert(neighbours[index].begin() + j, neighbours[index][i]);
-            neighbours[index].erase(neighbours[index].begin() + i); 
+            neighbours[index].erase(neighbours[index].begin() + i);
             ++index;
         }
     }
@@ -237,7 +240,7 @@ std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation &perm) {
             neighbours[index].resize(perm.size());
             std::copy(perm.begin(), perm.end(), neighbours[index].begin());
             neighbours[index].insert(neighbours[index].end() - j, neighbours[index][perm.size() - i - 1]);
-            neighbours[index].erase(neighbours[index].end() - i - 1); 
+            neighbours[index].erase(neighbours[index].end() - i - 1);
             ++index;
         }
     }
