@@ -495,7 +495,7 @@ MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
                           MH::Solution<Encoding> &current,
                           MH::SolCollection<Encoding> &neighbours,
                           II_BestImproving &) {
-    auto &min = *std::min(neighbours.begin(), neighbours.end()); 
+    auto &min = *std::min_element(neighbours.begin(), neighbours.end()); 
     return (min < current) ? min : current;
 }
 
@@ -554,7 +554,7 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
         ++generationCount) {
         MH::Evolutionary::generate(instance, population, algorithm);
     }
-    auto min = *std::min(population.begin(), population.end());
+    auto min = *std::min_element(population.begin(), population.end());
     return min;
 }
 
@@ -884,7 +884,7 @@ MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &,
                                  MH::Evolutionary::DE_Best &) {
-    selectionPool.push_back( (*std::min(population.begin(), population.end())).encoding );
+    selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
     return selectionPool.back();
 }
 
@@ -908,7 +908,7 @@ MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
                                  MH::SolCollection<Encoding> &population,
                                  MH::Evolutionary::DE<Selection, Crossover> &de,
                                  MH::Evolutionary::DE_CurrentToBest &) {
-    selectionPool.push_back( (*std::min(population.begin(), population.end())).encoding );
+    selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
     return selectionPool.front() + de.current_factor * (selectionPool.back() - selectionPool.front());
 }
 
