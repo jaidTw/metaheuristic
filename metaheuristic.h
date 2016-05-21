@@ -44,7 +44,7 @@ namespace MH {
     // Replaces duplicate solutions with random ones.
     template <typename Encoding, typename Instance>
     inline void replaceDuplicates(SolCollection<Encoding> &solutions, Instance &instance) {
-        static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
         for(size_t i = 0; i < solutions.size(); ++i) {
             for(size_t j = i + 1; j < solutions.size(); ++j) {
                 if(solutions[i].score == solutions[j].score) {
@@ -116,11 +116,11 @@ namespace MH {
         struct DFS {};
 
         // aliases
-        template <typename Strategy>
-        using IterativeImprovement = II<Strategy>;
+        template <typename Arg>
+        using IterativeImprovement = II<Arg>;
         using SimulatedAnnealing = SA;
-        template <typename Encoding, typename TraitType>
-        using TabuSearch = TS<Encoding, TraitType>;
+        template <typename... Args>
+        using TabuSearch = TS<Args...>;
         using RandomSearch = RS;
         using BreadthFirstSearch = BFS;
         using DepthFirstSearch = DFS;
@@ -268,10 +268,10 @@ namespace MH {
         };
 
         // aliases
-        template <typename Selection, typename Crossover>
-        using DifferentialEvolution = DE<Selection, Crossover>;
-        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
-        using MemeticAlgorithm = MA<Encoding, Selection, Crossover, LocalSearch, LSInstance>;
+        template <typename... Args>
+        using DifferentialEvolution = DE<Args...>;
+        template <typename... Args>
+        using MemeticAlgorithm = MA<Args...>;
 
         // Function definitions
         template <typename FP, typename Selection, typename Crossover>
@@ -281,26 +281,26 @@ namespace MH {
         template <typename Encoding, typename Algorithm>
         Solution<Encoding> evolution(Instance<Encoding> &, Algorithm &, std::vector<Encoding> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
-        void initialise(Instance<Encoding> &, DE<Selection, Crossover> &, std::vector<Encoding> &);
+        template <typename Encoding, typename... DEArgs>
+        void initialise(Instance<Encoding> &, DE<DEArgs...> &, std::vector<Encoding> &);
 
-        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
-        void initialise(Instance<Encoding> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &, std::vector<Encoding> &);
+        template <typename Encoding, typename... MAArgs>
+        void initialise(Instance<Encoding> &, MA<Encoding, MAArgs...> &, std::vector<Encoding> &);
 
         template <typename Encoding>
         SolCollection<Encoding> initialisePopulation(Instance<Encoding> &, std::vector<Encoding> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
-        void generate(Instance<Encoding> &, SolCollection<Encoding> &, DE<Selection, Crossover> &);
+        template <typename Encoding, typename... DEArgs>
+        void generate(Instance<Encoding> &, SolCollection<Encoding> &, DE<DEArgs...> &);
 
-        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
-        void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &);
+        template <typename Encoding, typename... MAArgs>
+        void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, MAArgs...> &);
 
-        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
-        inline void generate(Instance<Encoding> &, std::vector<Solution<Encoding>> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &);
+        template <typename Encoding, typename... MAArgs>
+        inline void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, MAArgs...> &);
 
-        template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
-        inline void mate(Instance<Encoding> &instance, SolCollection<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &);
+        template <typename Encoding, typename... MAArgs>
+        inline void mate(Instance<Encoding> &instance, SolCollection<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, MA<Encoding, MAArgs...> &);
 
         template <typename Encoding>
         inline size_t mateSelect(SolCollection<Encoding> &, Tournament &);
@@ -314,24 +314,24 @@ namespace MH {
         template <typename Encoding>
         inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, PMX &);
 
-        template <typename Encoding, typename Selection, typename Crossover> 
-        Encoding DE_mate(Encoding &, SolCollection<Encoding> &, DE<Selection, Crossover> &);
+        template <typename Encoding, typename... DEArgs> 
+        Encoding DE_mate(Encoding &, SolCollection<Encoding> &, DE<DEArgs...> &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
+        template <typename Encoding, typename... DEArgs>
         Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<Selection, Crossover> &, DE_Best &);
+                                DE<DEArgs...> &, DE_Best &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
+        template <typename Encoding, typename... DEArgs>
         Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<Selection, Crossover> &, DE_Random &);
+                                DE<DEArgs...> &, DE_Random &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
+        template <typename Encoding, typename... DEArgs>
         Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<Selection, Crossover> &, DE_CurrentToBest &);
+                                DE<DEArgs...> &, DE_CurrentToBest &);
 
-        template <typename Encoding, typename Selection, typename Crossover>
+        template <typename Encoding, typename... DEArgs>
         Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<Selection, Crossover> &, DE_CurrentToRandom &);
+                                DE<DEArgs...> &, DE_CurrentToRandom &);
 
         template <typename Encoding>
         Encoding DE_mutation(std::vector<Encoding> &, SolCollection<Encoding> &, double, uint8_t);
@@ -530,9 +530,10 @@ inline MH::Solution<Encoding> &
 MH::Trajectory::select_SA(double temperature,
                            MH::Solution<Encoding> &current,
                            MH::SolCollection<Encoding> &neighbours) {
-    // uniform random number generators
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    // random number generators
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_real_distribution<double> uniform;
+
     for(auto &neighbour : neighbours) {
         if((neighbour < current) ||
            (exp(current.score - neighbour.score) / temperature > uniform(eng)) ) {
@@ -591,17 +592,17 @@ MH::Evolutionary::evolution(Instance<std::vector<FP>> &instance,
     return MH::Solution<std::vector<FP>>(vec_result, result.score);
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename... DEArgs>
 inline void
 MH::Evolutionary::initialise(MH::Evolutionary::Instance<Encoding> &,
-                             MH::Evolutionary::DE<Selection, Crossover> &,
+                             MH::Evolutionary::DE<DEArgs...> &,
                              std::vector<Encoding> &) {
 }
 
-template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+template <typename Encoding, typename... MAArgs>
 inline void
 MH::Evolutionary::initialise(MH::Evolutionary::Instance<Encoding> &,
-                             MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &,
+                             MH::Evolutionary::MA<Encoding, MAArgs...> &,
                              std::vector<Encoding> &) {
 }
 
@@ -618,11 +619,11 @@ MH::Evolutionary::initialisePopulation(MH::Evolutionary::Instance<Encoding> &ins
     return population;
 }
 
-template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+template <typename Encoding, typename... MAArgs>
 inline void
 MH::Evolutionary::generate(Instance<Encoding> &instance,
                            MH::SolCollection<Encoding> &population,
-                           MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &ma) {
+                           MH::Evolutionary::MA<Encoding, MAArgs...> &ma) {
     auto &thePopulation = (ma.offspringAreParents) ? ma.offspring : population;
     auto &theOffspring = (ma.offspringAreParents) ? population : ma.offspring;
     for(size_t i = 0; i < population.size(); i += 2) {
@@ -648,13 +649,13 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     ma.offspringAreParents = !ma.offspringAreParents;
 }
 
-template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+template <typename Encoding, typename... MAArgs>
 inline void
 MH::Evolutionary::mate(Instance<Encoding> &instance,
                        MH::SolCollection<Encoding> &population,
                        MH::Solution<Encoding> &offspring1,
                        MH::Solution<Encoding> &offspring2,
-                       MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance> &ma) {
+                       MH::Evolutionary::MA<Encoding, MAArgs...> &ma) {
     auto parent1 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
     auto parent2 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
     while(parent2 == parent1) {
@@ -835,11 +836,11 @@ MH::Evolutionary::crossover(Instance<Encoding> &instance,
     offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename... DEArgs>
 inline void
 MH::Evolutionary::generate(Instance<Encoding> &instance,
                            std::vector<Solution<Encoding>> &population,
-                           MH::Evolutionary::DE<Selection, Crossover> &de) {
+                           MH::Evolutionary::DE<DEArgs...> &de) {
     for(auto i = 0UL; i < population.size(); ++i) {
         auto target_vec = population[i].encoding;
         auto trial_vec = MH::Evolutionary::DE_mate(target_vec, population, de);
@@ -851,11 +852,11 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     }
 }
 
-template <typename Encoding, typename Selection, typename Crossover> 
+template <typename Encoding, typename... DEArgs> 
 inline Encoding
 MH::Evolutionary::DE_mate(Encoding &target_vec,
                           std::vector<Solution<Encoding>> &population,
-                          MH::Evolutionary::DE<Selection, Crossover> &de) {
+                          MH::Evolutionary::DE<DEArgs...> &de) {
     std::vector<Encoding> selectionPool;
     selectionPool.push_back(target_vec);
     auto mutant_vec = MH::Evolutionary::DE_mateSelect(selectionPool, population, de, de.selection_strategy);
@@ -864,49 +865,49 @@ MH::Evolutionary::DE_mate(Encoding &target_vec,
     return trial_vec;
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename... DEArgs>
 inline Encoding
 MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
                                  MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<Selection, Crossover> &,
+                                 MH::Evolutionary::DE<DEArgs...> &,
                                  MH::Evolutionary::DE_Random &) {
     // random number generator
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
 
     selectionPool.push_back(population[uniform(eng)].encoding);
     return selectionPool.back();
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename... DEArgs>
 inline Encoding
 MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
                                  MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<Selection, Crossover> &,
+                                 MH::Evolutionary::DE<DEArgs...> &,
                                  MH::Evolutionary::DE_Best &) {
     selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
     return selectionPool.back();
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename... DEArgs>
 inline Encoding
 MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
                                  MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<Selection, Crossover> &de,
+                                 MH::Evolutionary::DE<DEArgs...> &de,
                                  MH::Evolutionary::DE_CurrentToRandom &) {
     // random number generator
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
 
     selectionPool.push_back(population[uniform(eng)].encoding);
     return selectionPool.front() + de.current_factor * (selectionPool.back() - selectionPool.front());
 }
 
-template <typename Encoding, typename Selection, typename Crossover>
+template <typename Encoding, typename... DEArgs>
 inline Encoding
 MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
                                  MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<Selection, Crossover> &de,
+                                 MH::Evolutionary::DE<DEArgs...> &de,
                                  MH::Evolutionary::DE_CurrentToBest &) {
     selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
     return selectionPool.front() + de.current_factor * (selectionPool.back() - selectionPool.front());
@@ -919,7 +920,7 @@ MH::Evolutionary::DE_mutation(std::vector<Encoding> &selectionPool,
                          double scaling_factor,
                          uint8_t diff_vecs) {
     // random number generators
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
 
     auto sol1 = selectionPool.front();
@@ -967,7 +968,7 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
                                double crossover_rate,
                                MH::Evolutionary::DE_Binomial &) {
     // random number generators
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_real_distribution<double> uniform_r;
     static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
 
@@ -997,7 +998,7 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
                                double crossover_rate,
                                MH::Evolutionary::DE_Exponential &) {
     // Random number generators
-    static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_real_distribution<double> uniform_r;
     static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
 
