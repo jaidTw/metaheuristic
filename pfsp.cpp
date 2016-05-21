@@ -167,13 +167,13 @@ int main(int argc, char** argv) {
     //auto result = MH::Trajectory::search(TInstance, TS, init);
     auto result = MH::Evolutionary::evolution(EInstance, MA, init);
     std::cout << "\nFinal score: " << result.score << ".\n";
-    std::cout << "花費的時間：";
+    std::cout << "Soent：";
     auto end = Clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
     std::cout << duration.count() / 1000.0 << "秒。\n";
     for (auto &e : result.encoding)
         std::cout << (int)e << " ";
-
+    std::cout <<std::endl;
 
     return 0;
 }

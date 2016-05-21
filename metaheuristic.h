@@ -81,7 +81,7 @@ namespace MH {
             II(size_t theGenerationLimit) :
             generationLimit(theGenerationLimit),
             prevScore(std::numeric_limits<double>::infinity()) {}
-            
+
             size_t generationLimit;
             double score;
             double prevScore;
@@ -297,7 +297,7 @@ namespace MH {
         template <typename Encoding>
         inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, PMX &);
 
-        template <typename Encoding, typename... DEArgs> 
+        template <typename Encoding, typename... DEArgs>
         Encoding DE_mate(Encoding &, SolCollection<Encoding> &, DE<DEArgs...> &);
 
         template <typename Encoding, typename... DEArgs>
@@ -457,6 +457,7 @@ MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &,
                        MH::Trajectory::SA &sa) {
     auto &result = MH::Trajectory::select_SA(sa._temperature, current, neighbours);
     ++sa._epoch_count;
+    //std::cout<<sa._temperature<<std::endl;
     if(sa._epoch_count == sa.epoch_length) {
         sa._temperature = sa.cooling(sa._temperature);
         sa._epoch_count = 0;
@@ -492,7 +493,7 @@ MH::Trajectory::select_II(MH::Trajectory::Instance<Encoding> &,
                           MH::Solution<Encoding> &current,
                           MH::SolCollection<Encoding> &neighbours,
                           II_BestImproving &) {
-    auto &min = *std::min_element(neighbours.begin(), neighbours.end()); 
+    auto &min = *std::min_element(neighbours.begin(), neighbours.end());
     return (min < current) ? min : current;
 }
 
@@ -550,8 +551,12 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
     for(auto generationCount = 0UL;
         generationCount < instance.generationLimit;
         ++generationCount) {
-
         MH::Evolutionary::generate(instance, population, algorithm);
+        std::cout<<"Generation "<<generationCount<<": ";
+        auto minimum=population[0].score;
+        for(auto &sol : population)
+            if(sol.score<minimum){minimum=sol.score;}
+        std::cout<<minimum<<std::endl;
     }
     auto min = *std::min_element(population.begin(), population.end());
     return min;
@@ -637,7 +642,7 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
         auto max = std::max_element(theOffspring.begin(), theOffspring.end());
         *max = *min;
     }
-    
+
     // Remove duplicates to avoid early convergence to a local optimum.
     if(ma.removeDuplicates) {
         replaceDuplicates(theOffspring, instance);
@@ -668,7 +673,7 @@ MH::Evolutionary::mateSelect(MH::SolCollection<Encoding> &population,
                              MH::Evolutionary::Tournament &tournament) {
     // random number generator
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
-    
+
     std::vector<size_t> contestants;
     for(size_t i = 0; i < tournament.size; ++i) {
         contestants.push_back(eng() % population.size());
@@ -850,7 +855,7 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     }
 }
 
-template <typename Encoding, typename... DEArgs> 
+template <typename Encoding, typename... DEArgs>
 inline Encoding
 MH::Evolutionary::DE_mate(Encoding &target_vec,
                           std::vector<Solution<Encoding>> &population,
@@ -1002,13 +1007,13 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
 
     // Perform the crossover based on the target vector.
     auto trial_vec(target_vec);
-    
+
     // Generate a random crossover starting position.
     auto pos = uniform_i(eng);
     for(auto i = 0UL; i < target_vec.size(); ++i) {
         trial_vec[pos] = mutant_vec[pos];
         pos = (pos + 1) % target_vec.size();
- 
+
         if(uniform_r(eng) >= crossover_rate) {
             break;
         }
