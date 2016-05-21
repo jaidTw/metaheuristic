@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <cfloat>
 #include <numeric>
 #include <cmath>
 #include <iostream>
@@ -25,15 +24,7 @@ namespace MH {
             return a.score < b.score;
         }
         friend bool operator==(Solution<Encoding> &a, Solution<Encoding> &b) {
-            if(a.score != b.score || a.encoding.size() != b.encoding.size()) {
-                return false;
-            }
-            for(size_t i = 0; i < a.encoding.size(); ++i) {
-                if(a.encoding[i] != b.encoding[i]) {
-                    return false;
-                }
-            }
-            return true;
+            return a.score == b.score && a.encoding == b.encoding;
         }
         // Solution encoding
         Encoding encoding;
@@ -89,7 +80,7 @@ namespace MH {
         struct II {
             II(size_t theGenerationLimit) :
             generationLimit(theGenerationLimit),
-            prevScore(DBL_MAX) {}
+            prevScore(std::numeric_limits<double>::infinity()) {}
             
             size_t generationLimit;
             double score;
@@ -105,15 +96,15 @@ namespace MH {
         // The SA algorithm class
         struct SA {
             double init_temperature;
-            int64_t epoch_length;
+            uint64_t epoch_length;
             double (*cooling)(double);
             double temperature;
-            int64_t epoch_count;
+            uint64_t epoch_count;
         };
 
         template <typename Encoding, typename TraitType>
         struct TS {
-            int8_t length;
+            uint8_t length;
             // the trait function accept an encoding and transform it into traits to store in tabu list.
             TraitType (*trait)(Encoding&, void *);
             std::deque<TraitType> queue;
@@ -452,7 +443,7 @@ MH::Trajectory::select(MH::Trajectory::Instance<Encoding> &instance,
     // Stop the search if at a local optimum.
     if(ii.score >= ii.prevScore) {
         instance.generationLimit = 0;
-        ii.prevScore = DBL_MAX;
+        ii.prevScore = std::numeric_limits<double>::infinity();
     }
     else {
         ii.prevScore = ii.score;

@@ -15,7 +15,7 @@ typedef std::vector<uint8_t> Permutation;
 typedef std::vector<std::vector<uint16_t>> Table;
 typedef std::chrono::high_resolution_clock Clock;
 
-std::vector<std::vector<uint16_t>> PFSPParseData(std::fstream&);
+Table PFSPParseData(std::fstream&);
 std::vector<Permutation> PFSPInsertionNeighbourhoodSmall(Permutation&); // Supposedly preferable to swap.
 std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation&); // Slow.
 std::vector<Permutation> PFSPSwapNeighbourhoodSmall(Permutation&);
@@ -23,7 +23,6 @@ void PFSPShiftMutationPerSolution(Permutation&, double);
 void PFSPShiftMutationPerJob(Permutation&, double); // Terrible. Do not use.
 double PFSPMakespan(Permutation&, void*); // Naïve algorithm. A faster version should be written for evaluating neighbourhoods.
 Permutation PFSPConvert(Permutation &encoding, void *);
-double DETest(std::vector<double> &, void *);
 
 int main(int argc, char** argv) {
     if(argc != 2) {
@@ -130,7 +129,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-std::vector<std::vector<uint16_t>> PFSPParseData(std::fstream &file) {
+Table PFSPParseData(std::fstream &file) {
     uint16_t numJobs, numMachines;
     file >> numJobs >> numMachines;
     file.ignore(std::numeric_limits<int64_t>::max(), '\n');
@@ -261,10 +260,4 @@ inline double PFSPCooling(double temperature) {
 
 inline Permutation PFSPConvert(Permutation &encoding, void *) {
     return encoding;
-}
-
-double DETest(std::vector<double>& sol, void *) {
-    std::vector<double> csol(sol);
-    std::for_each(csol.begin(), csol.end(), [&](auto &n) { n *= n; });
-    return std::accumulate(csol.begin(), csol.end(), .0);
 }
