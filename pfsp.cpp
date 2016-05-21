@@ -52,6 +52,29 @@ int main(int argc, char** argv) {
     std::cout << "Number of jobs: " << numJobs << std::endl;
     std::cout << "Number of machines: " << numMachines << std::endl;
 
+/*
+    // Generate initial solution for trajectory-based metaheuristics.
+    Permutation init(numJobs);
+    std::iota(init.begin(), init.end(), 1);
+
+    auto TrajectoryInstance = MH::Trajectory::Instance<Permutation>();
+    Tinstance.generationLimit = 3000;
+    Tinstance.neighbourhood = PFSPSwapNeighbourhoodSmall;
+    Tinstance.evaluate = PFSPMakespan;
+    Tinstance.inf = reinterpret_cast<void *>(timeTable);
+
+    auto sa = MH::Trajectory::SimulatedAnnealing();
+    sa.init_temperature = 10000;
+    sa.cooling = PFSPCooling;
+    sa.epoch_length = 20;
+
+    MH::Trajectory::search(Tinstance, sa, init);
+*/
+
+
+
+
+
     // Configure problem instance for trajectory-based metaheuristics.
     auto TInstance = MH::Trajectory::Instance<Permutation>();
     TInstance.generationLimit = 3000;
@@ -76,11 +99,6 @@ int main(int argc, char** argv) {
     TS.length = 70;
     TS.trait = PFSPConvert;
 #endif // USE_II
-/*
-    // Generate initial solution for trajectory-based metaheuristics.
-    Permutation init(numJobs);
-    std::iota(init.begin(), init.end(), 1);
-*/
 
     // Configure the problem instance for evolutionary algorithms.
     auto EInstance = MH::Evolutionary::Instance<Permutation>();
@@ -117,16 +135,6 @@ int main(int argc, char** argv) {
 #endif // USE_SA
             TInstance);
     MA.selectionStrategy.size = 2;
-/*=======
-    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation,
-                MH::Evolutionary::Tournament,
-                MH::Evolutionary::OP,
-                MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>,
-                    MH::Trajectory::Instance<Permutation>>
-                (100, numJobs, true, true, 0.6, II, TInstance);
-    // tournament size
-    MA.selectionStrategy.size = 5;
->>>>>>> bd3de46b6633066ad7b3386f0b322537564d5756*/
 
     // random engine
     std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
