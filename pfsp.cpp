@@ -52,26 +52,26 @@ int main(int argc, char** argv) {
     std::cout << "Number of jobs: " << numJobs << std::endl;
     std::cout << "Number of machines: " << numMachines << std::endl;
 
+    ////////////////////////////////////////////////
+    // Configure local search instance used by MA //
+    ////////////////////////////////////////////////
 
-
-
-
-    // Configure problem instance for trajectory-based metaheuristics.
+    // Configure instance
     auto TInstance = MH::Trajectory::Instance<Permutation>();
-    TInstance.generationLimit = 3000;
+    TInstance.generationLimit = 300;
     TInstance.neighbourhood = PFSPInsertionNeighbourhoodSmall;
     TInstance.evaluate = PFSPMakespan;
     TInstance.inf = reinterpret_cast<void *>(&timeTable);
 
-    // II_FirstImproving | II_BestImproving | II_Stochastic
+    // Configure algorithm
 #ifdef USE_II_FI
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>();
+    auto II = MH::Trajectory::II<MH::Trajectory::II_FirstImproving>();
 #elif USE_II_BI
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_BestImproving>();
+    auto II = MH::Trajectory::II<MH::Trajectory::II_BestImproving>();
 #elif USE_II_SC
-    auto II = MH::Trajectory::IterativeImprovement<MH::Trajectory::II_Stochastic>();
+    auto II = MH::Trajectory::II<MH::Trajectory::II_Stochastic>();
 #elif USE_SA
-    auto SA = MH::Trajectory::SimulatedAnnealing();
+    auto SA = MH::Trajectory::SA();
     SA.init_temperature = 10000;
     SA.cooling = PFSPCooling;
     SA.epoch_length = 20;
@@ -79,16 +79,20 @@ int main(int argc, char** argv) {
     auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
     TS.length = 70;
     TS.trait = PFSPConvert;
-#endif // USE_II
+#endif
 
-    // Configure the problem instance for evolutionary algorithms.
+    /////////////////////////////
+    // Configure instance & MA //
+    /////////////////////////////
+    
+    // Configure instance
     auto EInstance = MH::Evolutionary::Instance<Permutation>();
     EInstance.generationLimit = 700;
     EInstance.evaluate = PFSPMakespan;
     EInstance.mutate = PFSPShiftMutationPerSolution;
     EInstance.inf = reinterpret_cast<void *>(&timeTable);
 
-    // Configure a memetic algorithm.
+    // Configure MA
     auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament,
 #ifdef USE_OP
         MH::Evolutionary::OP,
@@ -96,15 +100,15 @@ int main(int argc, char** argv) {
         MH::Evolutionary::SJOX,
 #endif // USE_OP
 #ifdef USE_II_FI
-        MH::Trajectory::IterativeImprovement<MH::Trajectory::II_FirstImproving>,
+        MH::Trajectory::II<MH::Trajectory::II_FirstImproving>,
 #elif USE_II_BI
-        MH::Trajectory::IterativeImprovement<MH::Trajectory::II_BestImproving>,
+        MH::Trajectory::II<MH::Trajectory::II_BestImproving>,
 #elif USE_II_SC
-        MH::Trajectory::IterativeImprovement<MH::Trajectory::II_Stochastic>,
+        MH::Trajectory::II<MH::Trajectory::II_Stochastic>,
 #elif USE_SA
-        MH::Trajectory::SimulatedAnnealing,
+        MH::Trajectory::SA,
 #elif USE_TS
-        MH::Trajectory::TabuSearch,
+        MH::Trajectory::TS,
 #endif // USE_II_FI
         MH::Trajectory::Instance<Permutation>>(100, numJobs,true,true,0.6,
 #if defined(USE_II_FI) || defined(USE_II_BI) || defined(USE_II_SC)
@@ -120,24 +124,40 @@ int main(int argc, char** argv) {
     // random engine
     std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 
-    // Generate initial population.
+    ///////////////////////////////////////////
+    // Generate initial population using TS. //
+    ///////////////////////////////////////////
+    
+    // Configure instance for initial solution generating process.
     auto initInstance = MH::Trajectory::Instance<Permutation>();
+    initInstance.generationLimit = 300;
+    initInstance.neighbourhood = PFSPInsertionNeighbourhoodSmall;
+    initInstance.evaluate = PFSPMakespan;
+    initInstance.inf = reinterpret_cast<void *>(&timeTable);
 
-    auto initSA = MH::Trajectory::SA();
-    initSA.epoch_length = 20;
-    initSA.init_temperature = 7000;
-    initSA.cooling = PFSPCooling;
+    // Configure TS
+    auto initTS = MH::Trajectory::TS<Permutation, Permutation>();
+    initTS.length = 70;
+    initTS.trait = PFSPConvert;
 
+    auto start = Clock::now();
+
+    /////////////////////////////////
+    // Generate initial population //
+    /////////////////////////////////
     std::vector<Permutation> init(MA.offspring.size());
     for(auto &sol : init) {
         sol.resize(numJobs);
         std::iota(sol.begin(), sol.end(), 1);
         std::shuffle(sol.begin(), sol.end(), eng);
 
-        sol = MH::Trajectory::search(initInstance, initSA, sol).encoding;
+        // Use random init solution to run TS
+        sol = MH::Trajectory::search(initInstance, initTS, sol).encoding;
     }
 
-    auto start = Clock::now();
+    //////////////
+    // Start MA //
+    //////////////
 
     auto result = MH::Evolutionary::evolution(EInstance, MA, init);
 
@@ -196,6 +216,7 @@ std::vector<Permutation> PFSPInsertionNeighbourhoodSmall(Permutation &perm) {
 
 std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation &perm) {
     static std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+
     std::vector<Permutation> neighbours((perm.size() - 1) * perm.size());
     size_t index = 0;
     for(size_t i = 0; i < perm.size(); ++i) {
