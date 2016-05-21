@@ -85,7 +85,7 @@ namespace MH {
             size_t generationLimit;
             double score;
             double prevScore;
-            Strategy strategy;
+            Strategy _strategy;
         };
 
         // II search strategies
@@ -98,8 +98,8 @@ namespace MH {
             double init_temperature;
             uint64_t epoch_length;
             double (*cooling)(double);
-            double temperature;
-            uint64_t epoch_count;
+            double _temperature;
+            uint64_t _epoch_count;
         };
 
         template <typename Encoding, typename TraitType>
@@ -107,7 +107,7 @@ namespace MH {
             uint8_t length;
             // the trait function accept an encoding and transform it into traits to store in tabu list.
             TraitType (*trait)(Encoding&, void *);
-            std::deque<TraitType> queue;
+            std::deque<TraitType> _queue;
         };
 
         // These basic searches is aim to compare with others
@@ -203,31 +203,14 @@ namespace MH {
             double current_factor;
             double scaling_factor;
             uint8_t num_of_diff_vectors;
-            Selection selection_strategy;
-            Crossover crossover_strategy;
+            Selection _selection_strategy;
+            Crossover _crossover_strategy;
         };
 
         template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
         struct MA {
-            MA(size_t thePopulationSize,
-               size_t theNumJobs,
-               bool theElitism,
-               bool theRemoveDuplicates,
-               double theMutationProbability,
-               LocalSearch &theLocalSearch,
-               LSInstance &theLSInstance) :
-                offspringAreParents(false),
-                elitism(theElitism),
-                removeDuplicates(theRemoveDuplicates),
-                mutationProbability(theMutationProbability),
-                localSearch(theLocalSearch),
-                lsInstance(theLSInstance) {
-                offspring.resize(thePopulationSize);
-                for(auto &elem : offspring) {
-                    elem.encoding.resize(theNumJobs);
-                }
-            }
-            bool offspringAreParents;
+            MA(size_t, size_t, bool, bool, double, LocalSearch &, LSInstance &);
+            bool _offspringAreParents;
             bool elitism;
             bool removeDuplicates;
             double mutationProbability; // Should be between 0 and 1, inclusive.
@@ -274,8 +257,8 @@ namespace MH {
         using MemeticAlgorithm = MA<Args...>;
 
         // Function definitions
-        template <typename FP, typename Selection, typename Crossover>
-        Solution<std::vector<FP>> evolution(Instance<std::vector<FP>> &, DE<Selection, Crossover> &,
+        template <typename FP, typename... DEArgs>
+        Solution<std::vector<FP>> evolution(Instance<std::vector<FP>> &, DE<DEArgs...> &,
                                             std::vector<std::vector<FP>> &);
 
         template <typename Encoding, typename Algorithm>
@@ -353,11 +336,25 @@ namespace MH {
 // Definitions
 
 template <typename Encoding>
-inline MH::Solution<Encoding>::Solution() : encoding(), score(0){}
+inline MH::Solution<Encoding>::Solution() : encoding(), score(0) {}
 template <typename Encoding>
-inline MH::Solution<Encoding>::Solution(Encoding &e) : encoding(e), score(0){}
+inline MH::Solution<Encoding>::Solution(Encoding &e) : encoding(e), score(0) {}
 template <typename Encoding>
 inline MH::Solution<Encoding>::Solution(Encoding &e, double s) : encoding(e), score(s){}
+
+
+template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
+MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance>::MA
+    (size_t thePopulationSize, size_t theNumJobs, bool theElitism, bool theRemoveDuplicates,
+     double theMutationProbability, LocalSearch &theLocalSearch, LSInstance &theLSInstance)
+    : _offspringAreParents(false), elitism(theElitism), removeDuplicates(theRemoveDuplicates),
+        mutationProbability(theMutationProbability), localSearch(theLocalSearch),
+        lsInstance(theLSInstance) {
+    offspring.resize(thePopulationSize);
+    for(auto &elem : offspring) {
+        elem.encoding.resize(theNumJobs);
+    }
+}
 
 // The main search framework for trajectory-based algorithms
 template <typename Encoding, typename AlgoType>
@@ -408,8 +405,8 @@ inline void
 MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &,
                            MH::Trajectory::SA &sa,
                            Encoding &) {
-    sa.temperature = sa.init_temperature;
-    sa.epoch_count = 0;
+    sa._temperature = sa.init_temperature;
+    sa._epoch_count = 0;
 }
 
 // Initialise TS: fill the tabu list (queue).
@@ -418,8 +415,8 @@ inline void
 MH::Trajectory::initialise(MH::Trajectory::Instance<Encoding> &instance,
                            MH::Trajectory::TS<Encoding, TraitType> &ts,
                            Encoding & init) {
-    ts.queue.resize(ts.length);
-    std::fill(ts.queue.begin(), ts.queue.end(), ts.trait(init, instance.inf));
+    ts._queue.resize(ts.length);
+    std::fill(ts._queue.begin(), ts._queue.end(), ts.trait(init, instance.inf));
 }
 
 // Initialise RS: nothing to do here.
@@ -437,7 +434,7 @@ MH::Trajectory::select(MH::Trajectory::Instance<Encoding> &instance,
                        MH::Solution<Encoding> &current,
                        MH::SolCollection<Encoding> &neighbours,
                        MH::Trajectory::II<Strategy>& ii) {
-    auto &result = MH::Trajectory::select_II(instance, current, neighbours, ii.strategy);
+    auto &result = MH::Trajectory::select_II(instance, current, neighbours, ii._strategy);
     ii.score = result.score;
 
     // Stop the search if at a local optimum.
@@ -458,11 +455,11 @@ MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &,
                        MH::Solution<Encoding> &current,
                        MH::SolCollection<Encoding> &neighbours,
                        MH::Trajectory::SA &sa) {
-    auto &result = MH::Trajectory::select_SA(sa.temperature, current, neighbours);
-    ++sa.epoch_count;
-    if(sa.epoch_count == sa.epoch_length) {
-        sa.temperature = sa.cooling(sa.temperature);
-        sa.epoch_count = 0;
+    auto &result = MH::Trajectory::select_SA(sa._temperature, current, neighbours);
+    ++sa._epoch_count;
+    if(sa._epoch_count == sa.epoch_length) {
+        sa._temperature = sa.cooling(sa._temperature);
+        sa._epoch_count = 0;
     }
     return result;
 }
@@ -477,14 +474,14 @@ MH::Trajectory::select(MH::Trajectory::Instance<Encoding > &instance,
                        MH::Trajectory::TS<Encoding, TraitType> &ts) {
     auto &min = neighbours.front();
     for(auto &neighbour : neighbours) {
-        if(std::find(ts.queue.begin(), ts.queue.end(),
-                     ts.trait(neighbour.encoding, instance.inf)) == ts.queue.end() &&
+        if(std::find(ts._queue.begin(), ts._queue.end(),
+                     ts.trait(neighbour.encoding, instance.inf)) == ts._queue.end() &&
            neighbour < min) {
             min = neighbour;
         }
     }
-    ts.queue.pop_front();
-    ts.queue.push_back(ts.trait(min.encoding, instance.inf));
+    ts._queue.pop_front();
+    ts._queue.push_back(ts.trait(min.encoding, instance.inf));
     return min;
 }
 
@@ -553,6 +550,7 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
     for(auto generationCount = 0UL;
         generationCount < instance.generationLimit;
         ++generationCount) {
+
         MH::Evolutionary::generate(instance, population, algorithm);
     }
     auto min = *std::min_element(population.begin(), population.end());
@@ -561,10 +559,10 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
 
 // Since DE will convert vectors to valarrays as an underlying type for performance,
 // we need this wrapper to convert the initial population and restore the returned valarray.
-template <typename FP, typename Selection, typename Crossover>
+template <typename FP, typename... DEArgs>
 MH::Solution<std::vector<FP>>
 MH::Evolutionary::evolution(Instance<std::vector<FP>> &instance,
-                            DE<Selection, Crossover> &de,
+                            DE<DEArgs...> &de,
                             std::vector<std::vector<FP>> &init) {
     // this wrapper wrap original evaluate function pointer and inf to new instance's inf
     _DE_INF_WRAPPER<FP> wrapper;
@@ -624,8 +622,8 @@ inline void
 MH::Evolutionary::generate(Instance<Encoding> &instance,
                            MH::SolCollection<Encoding> &population,
                            MH::Evolutionary::MA<Encoding, MAArgs...> &ma) {
-    auto &thePopulation = (ma.offspringAreParents) ? ma.offspring : population;
-    auto &theOffspring = (ma.offspringAreParents) ? population : ma.offspring;
+    auto &thePopulation = (ma._offspringAreParents) ? ma.offspring : population;
+    auto &theOffspring = (ma._offspringAreParents) ? population : ma.offspring;
     for(size_t i = 0; i < population.size(); i += 2) {
         MH::Evolutionary::mate(instance, thePopulation, theOffspring[i], theOffspring[i + 1], ma);
         // local search
@@ -646,7 +644,7 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     }
 
     // Let ma.offspring and population take turns acting as the parents.
-    ma.offspringAreParents = !ma.offspringAreParents;
+    ma._offspringAreParents = !ma._offspringAreParents;
 }
 
 template <typename Encoding, typename... MAArgs>
@@ -859,9 +857,9 @@ MH::Evolutionary::DE_mate(Encoding &target_vec,
                           MH::Evolutionary::DE<DEArgs...> &de) {
     std::vector<Encoding> selectionPool;
     selectionPool.push_back(target_vec);
-    auto mutant_vec = MH::Evolutionary::DE_mateSelect(selectionPool, population, de, de.selection_strategy);
+    auto mutant_vec = MH::Evolutionary::DE_mateSelect(selectionPool, population, de, de._selection_strategy);
     mutant_vec += MH::Evolutionary::DE_mutation(selectionPool, population, de.scaling_factor, de.num_of_diff_vectors);
-    auto trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de.crossover_strategy);
+    auto trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de._crossover_strategy);
     return trial_vec;
 }
 
