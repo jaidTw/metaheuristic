@@ -52,25 +52,6 @@ int main(int argc, char** argv) {
     std::cout << "Number of jobs: " << numJobs << std::endl;
     std::cout << "Number of machines: " << numMachines << std::endl;
 
-/*
-    // Generate initial solution for trajectory-based metaheuristics.
-    Permutation init(numJobs);
-    std::iota(init.begin(), init.end(), 1);
-
-    auto TrajectoryInstance = MH::Trajectory::Instance<Permutation>();
-    Tinstance.generationLimit = 3000;
-    Tinstance.neighbourhood = PFSPSwapNeighbourhoodSmall;
-    Tinstance.evaluate = PFSPMakespan;
-    Tinstance.inf = reinterpret_cast<void *>(timeTable);
-
-    auto sa = MH::Trajectory::SimulatedAnnealing();
-    sa.init_temperature = 10000;
-    sa.cooling = PFSPCooling;
-    sa.epoch_length = 20;
-
-    MH::Trajectory::search(Tinstance, sa, init);
-*/
-
 
 
 
@@ -139,41 +120,27 @@ int main(int argc, char** argv) {
     // random engine
     std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
 
-/*
-    // Generate initial solution for trajectory-based metaheuristics.
-    Permutation init(numJobs);
-    std::iota(init.begin(), init.end(), 1);
-*/
-
     // Generate initial population.
+    auto initInstance = MH::Trajectory::Instance<Permutation>();
+
+    auto initSA = MH::Trajectory::SA();
+    initSA.epoch_length = 20;
+    initSA.init_temperature = 7000;
+    initSA.cooling = PFSPCooling;
+
     std::vector<Permutation> init(MA.offspring.size());
     for(auto &sol : init) {
         sol.resize(numJobs);
         std::iota(sol.begin(), sol.end(), 1);
         std::shuffle(sol.begin(), sol.end(), eng);
+
+        sol = MH::Trajectory::search(initInstance, initSA, sol).encoding;
     }
 
-/*
-    auto DE = MH::Evolutionary::DifferentialEvolution<MH::Evolutionary::DE_Best, MH::Evolutionary::DE_Binomial>();
-    DE.crossover_rate = 0.6;
-    DE.scaling_factor = 0.6;
-    DE.num_of_diff_vectors = 2;
-    DE.current_factor = 0.5;
-    // random engine use to shuffle init solution
-    std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
-
-    std::vector<std::vector<double>> init(20);
-    for(auto &sol : init) {
-        sol.resize(30);
-        std::iota(sol.begin(), sol.end(), 1);
-        std::shuffle(sol.begin(), sol.end(), eng);
-    }
-*/
-
-    //MH::Trajectory::search(TInstance, TS, init);
     auto start = Clock::now();
-    //auto result = MH::Trajectory::search(TInstance, TS, init);
+
     auto result = MH::Evolutionary::evolution(EInstance, MA, init);
+
     std::cout << "\nFinal score: " << result.score << ".\n";
     std::cout << "花費的時間：";
     auto end = Clock::now();
