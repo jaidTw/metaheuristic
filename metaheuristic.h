@@ -552,11 +552,11 @@ MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
         generationCount < instance.generationLimit;
         ++generationCount) {
         MH::Evolutionary::generate(instance, population, algorithm);
-        std::cout<<"Generation "<<generationCount<<": ";
+        /*std::cout<<"Generation "<<generationCount<<": ";
         auto minimum=population[0].score;
         for(auto &sol : population)
             if(sol.score<minimum){minimum=sol.score;}
-        std::cout<<minimum<<std::endl;
+        std::cout<<minimum<<std::endl;*/
     }
     auto min = *std::min_element(population.begin(), population.end());
     return min;

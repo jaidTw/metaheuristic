@@ -2,7 +2,7 @@ C++ = g++
 CPPFLAGS = -march=corei7-avx -std=gnu++14 -Wall
 XOVER = -DUSE_OP
 TRAJ = -DUSE_II_FI
-POSTFIX = iifi
+POSTFIX = iifi_1k3h_calc
 debug:
 	$(C++) $(CPPFLAGS) $(XOVER) $(TRAJ) -Wextra -Werror -g -O0 pfsp.cpp -o pfsp_$(POSTFIX)
 release:
