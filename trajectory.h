@@ -26,18 +26,16 @@ namespace MH {
 
         template <typename Policy>
         class II {
+            template <typename E, typename A>
+            friend Solution<E> search(Instance<E> &, A &, E &);
+            typedef Policy policy;
         public:
-            II(size_t);
+            II();
+        private:
             template <typename Encoding>
             void initialise(Instance<Encoding> &, Encoding &);
             template <typename Encoding>
             Solution<Encoding>& select(Instance<Encoding> &, Solution<Encoding> &, SolCollection<Encoding> &);
-            
-            size_t generationLimit;
-            double score;
-        private:
-            typedef Policy policy;
-
             double _prevScore;
             policy _policy;
         };
@@ -59,15 +57,18 @@ namespace MH {
         // TODO : class II_Stochastic { };
 
         class SA {
+            template <typename E, typename A>
+            friend Solution<E> search(Instance<E> &, A &, E &);
         public:
+            double init_temperature;
+            uint64_t epoch_length;
+            double (*cooling)(double);
+
+        private:
             template <typename Encoding>
             void initialise(Instance<Encoding> &, Encoding &);
             template <typename Encoding>
             Solution<Encoding>& select(Instance<Encoding> &, Solution<Encoding> &, SolCollection<Encoding> &);
-            double init_temperature;
-            uint64_t epoch_length;
-            double (*cooling)(double);
-        private:
             template <typename Encoding>
             Solution<Encoding>& selectHelper(Solution<Encoding> &, SolCollection<Encoding> &);
             double _temperature;
@@ -76,13 +77,15 @@ namespace MH {
 
         template <typename Encoding, typename TraitType>
         class TS {
+            template <typename E, typename A>
+            friend Solution<E> search(Instance<E> &, A &, E &);
         public:
-            void initialise(Instance<Encoding> &, Encoding &);
-            Solution<Encoding>& select(Instance<Encoding> &, Solution<Encoding> &, SolCollection<Encoding> &);
             uint8_t length;
             // the trait function accept an encoding and transform it into traits to store in tabu list.
             TraitType (*trait)(Encoding&, void *);
         private:
+            void initialise(Instance<Encoding> &, Encoding &);
+            Solution<Encoding>& select(Instance<Encoding> &, Solution<Encoding> &, SolCollection<Encoding> &);
             std::deque<TraitType> _queue;
         };
 
@@ -107,10 +110,7 @@ namespace MH {
 }
 
 template <typename Policy>
-MH::Trajectory::II<Policy>::II(size_t theGenerationLimit) :
-            generationLimit(theGenerationLimit),
-            _prevScore(std::numeric_limits<double>::infinity()) {
-}
+MH::Trajectory::II<Policy>::II() : _prevScore(std::numeric_limits<double>::infinity()) {}
 
 // The main search framework for trajectory-based algorithms
 template <typename Encoding, typename Algorithm>
@@ -141,6 +141,7 @@ MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
         if(current < min) {
             min = current;
         }
+        std::cout << generationCount + 1 << " " << current.score << std::endl;
     }
     return min;
 }
@@ -148,22 +149,20 @@ MH::Trajectory::search(MH::Trajectory::Instance<Encoding> &instance,
 template <typename Policy> template <typename Encoding>
 inline void
 MH::Trajectory::II<Policy>::initialise(Instance<Encoding> &instance, Encoding &) {
-    // Since II can update the generationLimit, it must be reset here.
-    instance.generationLimit = this->generationLimit;
 }
 
 template <typename Encoding>
 inline void
 MH::Trajectory::SA::initialise(Instance<Encoding> &, Encoding &) {
-    this->_temperature = this->init_temperature;
+    _temperature = init_temperature;
 }
 
 
 template <typename Encoding, typename TraitType>
 inline void
 MH::Trajectory::TS<Encoding, TraitType>::initialise(Instance<Encoding> &instance, Encoding &init) {
-    this->_queue.resize(this->length);
-    std::fill(this->_queue.begin(), this->_queue.end(), this->trait(init, instance.inf));
+    _queue.resize(length);
+    std::fill(_queue.begin(), _queue.end(), trait(init, instance.inf));
 }
 
 // Best improving II: select the minimum among the neighbours.
@@ -196,15 +195,13 @@ MH::Trajectory::II<Policy>::select(Instance<Encoding> &instance,
                                    Solution<Encoding> &current,
                                    SolCollection<Encoding> &neighbours) {
     auto &result = Policy::select(current, neighbours);
-    score = result.score;
 
     // Stop the search if at a local optimum.
-    if(score >= _prevScore) {
+    if(result.score >= _prevScore) {
         instance.generationLimit = 0;
-        _prevScore = std::numeric_limits<double>::infinity();
     }
     else {
-        _prevScore = this->score;
+        _prevScore = result.score;
     }
     return result;
 }
@@ -215,8 +212,8 @@ inline MH::Solution<Encoding>&
 MH::Trajectory::SA::select(Instance<Encoding> &instance,
                            Solution<Encoding> &current,
                            SolCollection<Encoding> &neighbours) {
-    auto &result = MH::Trajectory::select_SA(_temperature, current, neighbours);
-    ++(_epoch_count);
+    auto &result = selectHelper(current, neighbours);
+    ++_epoch_count;
     if(_epoch_count == epoch_length) {
         _temperature = cooling(_temperature);
         _epoch_count = 0;
@@ -255,7 +252,7 @@ MH::Trajectory::SA::selectHelper(Solution<Encoding> &current,
 
     for(auto &neighbour : neighbours) {
         if((neighbour < current) ||
-           (exp(current.score - neighbour.score) / _temperature > uniform(eng)) ) {
+           (exp((current.score - neighbour.score)/ _temperature) > uniform(eng)) ) {
             return neighbour;
         }
     }
