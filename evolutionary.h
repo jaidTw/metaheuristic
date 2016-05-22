@@ -10,47 +10,128 @@
 
 namespace MH {
     namespace Evolutionary {
-        // selection strategies
+        template <typename SelectionPolicy, typename CrossoverPolicy>
+        class DE;
+
+        template<typename>
+        struct is_vector { static bool const value = false; };
+        template<typename T>
+        struct is_vector<std::vector<T>> { static bool const value = true; };
+        template<typename>
+        struct is_DE { static bool const value = false; };
+        template<typename S, typename C>
+        struct is_DE<DE<S, C>> { static bool const value = true; };
+
+
+        template <typename Encoding>
+        struct Instance {
+            // if Algorithm is not DE or Encoding is not std::vector
+            template <typename Algorithm>
+            Solution<Encoding> evolution(Algorithm &, std::vector<Encoding> &,
+                typename std::enable_if<!is_DE<Algorithm>::value || !is_vector<Encoding>::value>::type* = nullptr);
+            // if Algorithm is DE and Encoding is std::vector
+            template <typename Algorithm>
+            Solution<Encoding> evolution(Algorithm &, std::vector<Encoding> &,
+                typename std::enable_if<is_DE<Algorithm>::value && is_vector<Encoding>::value>::type* = nullptr);
+
+            uint64_t generationLimit;
+            void *inf;
+            // Neighbourhood generator: accepts an encoding and returns a vector of neighbourhood encodings.
+            std::vector<Encoding> (*neighbourhood)(Encoding &);
+            double (*evaluate)(Encoding &, void *);
+            void (*mutate)(Encoding &, double);
+        };
+
+        // selection policies
         class Tournament {
         public:
             size_t size;
         };
 
-        // crossover strategies
+        // crossover policies
         class OP {}; // one-point crossover
-        // TODO: class SJOX {}; // similar job order crossover
         class OX {}; // order crossover
-        // TODO: class LOX {}; // linear order crossover
         class PMX {}; // partially-mapped crossover
+        // TODO: class SJOX {}; // similar job order crossover
+        // TODO: class LOX {}; // linear order crossover
         // TODO: class CX {}; // cycle crossover
 
-        // mutation strategies
+        // mutation policies
         class Shift {};
 
-        // DE selection strategies
-        class DE_Random {};
-        class DE_Best {};
-        class DE_CurrentToRandom {};
-        class DE_CurrentToBest {};
-
-        // DE crossover strategies
-        class DE_None {};
-        class DE_Binomial {};
-        class DE_Exponential {};
-
         // Encoding of DE is restricted to vector of real numbers (float | double | long double).
-        template <typename Selection, typename Crossover>
-        struct DE {
+        template <typename SelectionPolicy, typename CrossoverPolicy>
+        class DE {
+        public:
             double crossover_rate;
             double current_factor;
             double scaling_factor;
             uint8_t num_of_diff_vectors;
-            Selection _selection_strategy;
-            Crossover _crossover_strategy;
+
+            template <typename Encoding>
+            void initialise(Instance<Encoding> &, std::vector<Encoding> &);
+            template <typename Encoding> 
+            Encoding mate(Encoding &, SolCollection<Encoding> &);
+        private:
+            template <typename Encoding>
+            static Encoding mutation(std::vector<Encoding> &, SolCollection<Encoding> &, double, uint8_t);
+        };
+
+        template <typename FP>
+        struct _DE_INF_WRAPPER {
+            double (*original_evaluate)(std::vector<FP> &, void *);
+            void *original_inf;
+        };
+
+        // DE selection policies
+        class DE_Random {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding select(std::vector<Encoding> &, SolCollection<Encoding> &, double);
+        };
+        class DE_Best {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding select(std::vector<Encoding> &, SolCollection<Encoding> &, double);
+        };
+        class DE_CurrentToRandom {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding select(std::vector<Encoding> &, SolCollection<Encoding> &, double);
+        };
+        class DE_CurrentToBest {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding select(std::vector<Encoding> &, SolCollection<Encoding> &, double);
+        };
+
+        // DE crossover policies
+        class DE_None {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding crossover(Encoding &, Encoding &, double);
+        };
+        class DE_Binomial {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding crossover(Encoding &, Encoding &, double);
+        };
+        class DE_Exponential {
+            template <typename S, typename C>
+            friend class DE;
+            template <typename Encoding>
+            static Encoding crossover(Encoding &, Encoding &, double);
         };
 
         template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
         struct MA {
+            void initialise(Instance<Encoding> &, std::vector<Encoding> &);
             MA(size_t, size_t, bool, bool, double, LocalSearch &, LSInstance &);
             bool _offspringAreParents;
             bool elitism;
@@ -63,21 +144,6 @@ namespace MH {
             Crossover crossoverStrategy;
         };
 
-        template <typename FP>
-        struct _DE_INF_WRAPPER {
-            double (*original_evaluate)(std::vector<FP> &, void *);
-            void *original_inf;
-        };
-
-        template <typename Encoding>
-        struct Instance {
-            uint64_t generationLimit;
-            void *inf;
-            // Neighbourhood generator: accepts an encoding and returns a vector of neighbourhood encodings.
-            std::vector<Encoding> (*neighbourhood)(Encoding &);
-            double (*evaluate)(Encoding &, void *);
-            void (*mutate)(Encoding &, double);
-        };
 
         template <typename FP>
         class _valarray_eq_binder {
@@ -99,18 +165,6 @@ namespace MH {
         using MemeticAlgorithm = MA<Args...>;
 
         // Function definitions
-        template <typename FP, typename... DEArgs>
-        Solution<std::vector<FP>> evolution(Instance<std::vector<FP>> &, DE<DEArgs...> &,
-                                            std::vector<std::vector<FP>> &);
-
-        template <typename Encoding, typename Algorithm>
-        Solution<Encoding> evolution(Instance<Encoding> &, Algorithm &, std::vector<Encoding> &);
-
-        template <typename Encoding, typename... DEArgs>
-        void initialise(Instance<Encoding> &, DE<DEArgs...> &, std::vector<Encoding> &);
-
-        template <typename Encoding, typename... MAArgs>
-        void initialise(Instance<Encoding> &, MA<Encoding, MAArgs...> &, std::vector<Encoding> &);
 
         template <typename Encoding>
         SolCollection<Encoding> initialisePopulation(Instance<Encoding> &, std::vector<Encoding> &);
@@ -120,9 +174,6 @@ namespace MH {
 
         template <typename Encoding, typename... MAArgs>
         void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, MAArgs...> &);
-
-        template <typename Encoding, typename... MAArgs>
-        inline void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, MAArgs...> &);
 
         template <typename Encoding, typename... MAArgs>
         inline void mate(Instance<Encoding> &instance, SolCollection<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, MA<Encoding, MAArgs...> &);
@@ -139,40 +190,59 @@ namespace MH {
         template <typename Encoding>
         inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, PMX &);
 
-        template <typename Encoding, typename... DEArgs> 
-        Encoding DE_mate(Encoding &, SolCollection<Encoding> &, DE<DEArgs...> &);
-
-        template <typename Encoding, typename... DEArgs>
-        Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<DEArgs...> &, DE_Best &);
-
-        template <typename Encoding, typename... DEArgs>
-        Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<DEArgs...> &, DE_Random &);
-
-        template <typename Encoding, typename... DEArgs>
-        Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<DEArgs...> &, DE_CurrentToBest &);
-
-        template <typename Encoding, typename... DEArgs>
-        Encoding DE_mateSelect(std::vector<Encoding> &, SolCollection<Encoding> &,
-                                DE<DEArgs...> &, DE_CurrentToRandom &);
-
-        template <typename Encoding>
-        Encoding DE_mutation(std::vector<Encoding> &, SolCollection<Encoding> &, double, uint8_t);
-
-        template <typename Encoding>
-        Encoding DE_crossover(Encoding &, Encoding &, double, DE_None &);
-
-        template <typename Encoding>
-        Encoding DE_crossover(Encoding &, Encoding &, double, DE_Binomial &);
-
-        template <typename Encoding>
-        Encoding DE_crossover(Encoding &, Encoding &, double, DE_Exponential &);
-
         template <typename FP>
         double _DE_EVALUATE_WRAPPER(std::valarray<FP> &, void *);
     }
+}
+
+template <typename Encoding> template <typename Algorithm>
+MH::Solution<Encoding>
+MH::Evolutionary::Instance<Encoding>::evolution(Algorithm &algorithm, std::vector<Encoding> &init,
+    typename std::enable_if<!is_DE<Algorithm>::value || !is_vector<Encoding>::value>::type*) {
+
+    algorithm.initialise(*this, init);
+    auto population = MH::Evolutionary::initialisePopulation(*this, init);
+    for(auto generationCount = 0UL; generationCount < generationLimit; ++generationCount) {
+
+        MH::Evolutionary::generate(*this, population, algorithm);
+
+        std::cout << generationCount + 1 << " " << std::min_element(population.begin(), population.end())->score << std::endl;
+    }
+    auto min = *std::min_element(population.begin(), population.end());
+    return min;
+
+}
+
+
+template <typename Encoding> template <typename Algorithm>
+MH::Solution<Encoding>
+MH::Evolutionary::Instance<Encoding>::evolution(Algorithm &de, std::vector<Encoding> &init,
+    typename std::enable_if<is_DE<Algorithm>::value && is_vector<Encoding>::value>::type*) {
+
+    typedef typename Encoding::value_type FP;
+    // this wrapper wrap original evaluate function pointer and inf to new instance's inf
+    _DE_INF_WRAPPER<FP> wrapper;
+    wrapper.original_evaluate = evaluate;
+    wrapper.original_inf = inf;
+
+    // instance set to valarray type
+    auto WrapInstance = Instance<std::valarray<FP>>();
+    // this evaluation function wrapper will restore original evaluator from inf
+    WrapInstance.evaluate = _DE_EVALUATE_WRAPPER;
+    WrapInstance.generationLimit = generationLimit;
+    WrapInstance.inf = reinterpret_cast<void *>(&wrapper);
+
+    // convert real vector to valarray
+    std::vector<std::valarray<FP>> valarray_init(init.size());
+    std::transform(init.begin(), init.end(), valarray_init.begin(),
+                   [&](auto &s) {
+                       return std::valarray<FP>(s.data(), s.size());
+                   });
+    auto result = WrapInstance.evolution(de, valarray_init);
+
+    // convert vallarray back to real vector
+    Encoding vec_result(std::begin(result.encoding), std::end(result.encoding));
+    return Solution<std::vector<FP>>(vec_result, result.score);
 }
 
 
@@ -190,68 +260,14 @@ MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance>::M
 }
 
 
-template <typename Encoding, typename Algorithm>
-MH::Solution<Encoding>
-MH::Evolutionary::evolution(MH::Evolutionary::Instance<Encoding> &instance,
-                            Algorithm &algorithm,
-                            std::vector<Encoding> &init) {
-    MH::Evolutionary::initialise(instance, algorithm, init);
-    auto population = MH::Evolutionary::initialisePopulation(instance, init);
-    for(auto generationCount = 0UL;
-        generationCount < instance.generationLimit;
-        ++generationCount) {
-
-        MH::Evolutionary::generate(instance, population, algorithm);
-    }
-    auto min = *std::min_element(population.begin(), population.end());
-    return min;
-}
-
-// Since DE will convert vectors to valarrays as an underlying type for performance,
-// we need this wrapper to convert the initial population and restore the returned valarray.
-template <typename FP, typename... DEArgs>
-MH::Solution<std::vector<FP>>
-MH::Evolutionary::evolution(Instance<std::vector<FP>> &instance,
-                            DE<DEArgs...> &de,
-                            std::vector<std::vector<FP>> &init) {
-    // this wrapper wrap original evaluate function pointer and inf to new instance's inf
-    _DE_INF_WRAPPER<FP> wrapper;
-    wrapper.original_evaluate = instance.evaluate;
-    wrapper.original_inf = instance.inf;
-
-    // instance set to valarray type
-    auto Uinstance = MH::Evolutionary::Instance<std::valarray<FP>>();
-    // this evaluation function wrapper will restore original evaluator from inf
-    Uinstance.evaluate = _DE_EVALUATE_WRAPPER;
-    Uinstance.generationLimit = instance.generationLimit;
-    Uinstance.inf = reinterpret_cast<void *>(&wrapper);
-
-    // convert real vector to valarray
-    std::vector<std::valarray<FP>> valarray_init(init.size());
-    std::transform(init.begin(), init.end(),
-                   valarray_init.begin(),
-                   [&](auto &s) {
-                       return std::valarray<FP>(s.data(), s.size());
-                   });
-    auto result = MH::Evolutionary::evolution(Uinstance, de, valarray_init);
-
-    // convert vallarray back to real vector
-    std::vector<FP> vec_result(std::begin(result.encoding), std::end(result.encoding));
-    return MH::Solution<std::vector<FP>>(vec_result, result.score);
-}
-
-template <typename Encoding, typename... DEArgs>
+template <typename S, typename C> template <typename Encoding>
 inline void
-MH::Evolutionary::initialise(MH::Evolutionary::Instance<Encoding> &,
-                             MH::Evolutionary::DE<DEArgs...> &,
-                             std::vector<Encoding> &) {
+MH::Evolutionary::DE<S, C>::initialise(Instance<Encoding> &, std::vector<Encoding> &) {
 }
 
-template <typename Encoding, typename... MAArgs>
+template <typename Encoding, typename S, typename C, typename LSA, typename LSI>
 inline void
-MH::Evolutionary::initialise(MH::Evolutionary::Instance<Encoding> &,
-                             MH::Evolutionary::MA<Encoding, MAArgs...> &,
-                             std::vector<Encoding> &) {
+MH::Evolutionary::MA<Encoding, S, C, LSA, LSI>::initialise(Instance<Encoding> &, std::vector<Encoding> &) {
 }
 
 template <typename Encoding>
@@ -259,8 +275,7 @@ inline MH::SolCollection<Encoding>
 MH::Evolutionary::initialisePopulation(MH::Evolutionary::Instance<Encoding> &instance,
                                        std::vector<Encoding> &init) {
     MH::SolCollection<Encoding> population(init.size());
-    std::transform(init.begin(), init.end(),
-                   population.begin(),
+    std::transform(init.begin(), init.end(), population.begin(),
                    [&](auto &s) {
                        return MH::Solution<Encoding>(s, instance.evaluate(s, instance.inf));
                    });
@@ -277,8 +292,8 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     for(size_t i = 0; i < population.size(); i += 2) {
         MH::Evolutionary::mate(instance, thePopulation, theOffspring[i], theOffspring[i + 1], ma);
         // local search
-        theOffspring[i] = MH::Trajectory::search(ma.lsInstance, ma.localSearch, theOffspring[i].encoding);
-        theOffspring[i + 1] = MH::Trajectory::search(ma.lsInstance, ma.localSearch, theOffspring[i + 1].encoding);
+        theOffspring[i] = ma.lsInstance.search(ma.localSearch, theOffspring[i].encoding);
+        theOffspring[i + 1] = ma.lsInstance.search(ma.localSearch, theOffspring[i + 1].encoding);
     }
 
     // elitism
@@ -491,7 +506,7 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
                            MH::Evolutionary::DE<DEArgs...> &de) {
     for(auto i = 0UL; i < population.size(); ++i) {
         auto target_vec = population[i].encoding;
-        auto trial_vec = MH::Evolutionary::DE_mate(target_vec, population, de);
+        auto trial_vec = de.mate(target_vec, population);
         // environment selection
         auto trial_score = instance.evaluate(trial_vec, instance.inf);
         if(trial_score < population[i].score) {
@@ -500,73 +515,61 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
     }
 }
 
-template <typename Encoding, typename... DEArgs> 
-inline Encoding
-MH::Evolutionary::DE_mate(Encoding &target_vec,
-                          std::vector<Solution<Encoding>> &population,
-                          MH::Evolutionary::DE<DEArgs...> &de) {
+
+template <typename SelectionPolicy, typename CrossoverPolicy> template <typename Encoding> 
+Encoding
+MH::Evolutionary::DE<SelectionPolicy, CrossoverPolicy>::mate(Encoding &target_vec, SolCollection<Encoding> &population) {
     std::vector<Encoding> selectionPool;
     selectionPool.push_back(target_vec);
-    auto mutant_vec = MH::Evolutionary::DE_mateSelect(selectionPool, population, de, de._selection_strategy);
-    mutant_vec += MH::Evolutionary::DE_mutation(selectionPool, population, de.scaling_factor, de.num_of_diff_vectors);
-    auto trial_vec = MH::Evolutionary::DE_crossover(target_vec, mutant_vec, de.crossover_rate, de._crossover_strategy);
+    auto mutant_vec = SelectionPolicy::select(selectionPool, population, current_factor);
+    mutant_vec += mutation(selectionPool, population, scaling_factor, num_of_diff_vectors);
+    auto trial_vec = CrossoverPolicy::crossover(target_vec, mutant_vec, crossover_rate);
     return trial_vec;
 }
 
-template <typename Encoding, typename... DEArgs>
+
+template <typename Encoding>
 inline Encoding
-MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
-                                 MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<DEArgs...> &,
-                                 MH::Evolutionary::DE_Random &) {
+MH::Evolutionary::DE_Random::select(std::vector<Encoding> &selectionPool, SolCollection<Encoding> &population, double) {
     // random number generator
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
 
     selectionPool.push_back(population[uniform(eng)].encoding);
     return selectionPool.back();
-}
-
-template <typename Encoding, typename... DEArgs>
-inline Encoding
-MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
-                                 MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<DEArgs...> &,
-                                 MH::Evolutionary::DE_Best &) {
-    selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
-    return selectionPool.back();
-}
-
-template <typename Encoding, typename... DEArgs>
-inline Encoding
-MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
-                                 MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<DEArgs...> &de,
-                                 MH::Evolutionary::DE_CurrentToRandom &) {
-    // random number generator
-    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
-    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
-
-    selectionPool.push_back(population[uniform(eng)].encoding);
-    return selectionPool.front() + de.current_factor * (selectionPool.back() - selectionPool.front());
-}
-
-template <typename Encoding, typename... DEArgs>
-inline Encoding
-MH::Evolutionary::DE_mateSelect(std::vector<Encoding> &selectionPool,
-                                 MH::SolCollection<Encoding> &population,
-                                 MH::Evolutionary::DE<DEArgs...> &de,
-                                 MH::Evolutionary::DE_CurrentToBest &) {
-    selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
-    return selectionPool.front() + de.current_factor * (selectionPool.back() - selectionPool.front());
 }
 
 template <typename Encoding>
-Encoding
-MH::Evolutionary::DE_mutation(std::vector<Encoding> &selectionPool,
-                         MH::SolCollection<Encoding> &population,
-                         double scaling_factor,
-                         uint8_t diff_vecs) {
+inline Encoding
+MH::Evolutionary::DE_Best::select(std::vector<Encoding> &selectionPool, SolCollection<Encoding> &population, double) {
+    selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
+    return selectionPool.back();
+}
+
+template <typename Encoding>
+inline Encoding
+MH::Evolutionary::DE_CurrentToRandom::select(std::vector<Encoding> &selectionPool, SolCollection<Encoding> &population, double factor) {
+    // random number generator
+    static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+    static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
+
+    selectionPool.push_back(population[uniform(eng)].encoding);
+    return selectionPool.front() + factor * (selectionPool.back() - selectionPool.front());
+}
+
+template <typename Encoding>
+inline Encoding
+MH::Evolutionary::DE_CurrentToBest::select(std::vector<Encoding> &selectionPool, SolCollection<Encoding> &population, double factor) {
+    selectionPool.push_back(std::min_element(population.begin(), population.end())->encoding);
+    return selectionPool.front() + factor * (selectionPool.back() - selectionPool.front());
+}
+
+
+template <typename S, typename C> template <typename Encoding>
+inline Encoding
+MH::Evolutionary::DE<S, C>::mutation(std::vector<Encoding> &selectionPool,
+                                     SolCollection<Encoding> &population,
+                                     double factor, uint8_t diff_vecs) {
     // random number generators
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_int_distribution<size_t> uniform(0, population.size() - 1);
@@ -595,26 +598,20 @@ MH::Evolutionary::DE_mutation(std::vector<Encoding> &selectionPool,
         selectionPool.push_back(sol2);
         mutant_vec += sol2 - sol1;
     }
-    return scaling_factor * mutant_vec;
+    return factor * mutant_vec;
 }
 
 // No crossover; do nothing.
 template <typename Encoding>
 inline Encoding
-MH::Evolutionary::DE_crossover(Encoding &,
-                               Encoding &mutant_vec,
-                               double,
-                               MH::Evolutionary::DE_None &) {
+MH::Evolutionary::DE_None::crossover(Encoding &, Encoding &mutant_vec, double) {
     return mutant_vec;
 }
 
 // DE binomial crossover
 template <typename Encoding>
-Encoding
-MH::Evolutionary::DE_crossover(Encoding &target_vec,
-                               Encoding &mutant_vec,
-                               double crossover_rate,
-                               MH::Evolutionary::DE_Binomial &) {
+inline Encoding
+MH::Evolutionary::DE_Binomial::crossover(Encoding &target_vec, Encoding &mutant_vec, double crossover_rate) {
     // random number generators
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_real_distribution<double> uniform_r;
@@ -640,21 +637,17 @@ MH::Evolutionary::DE_crossover(Encoding &target_vec,
 
 // DE exponential crossover
 template <typename Encoding>
-Encoding
-MH::Evolutionary::DE_crossover(Encoding &target_vec,
-                               Encoding &mutant_vec,
-                               double crossover_rate,
-                               MH::Evolutionary::DE_Exponential &) {
+inline Encoding
+MH::Evolutionary::DE_Exponential::crossover(Encoding &target_vec, Encoding &mutant_vec, double crossover_rate) {
     // Random number generators
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     static std::uniform_real_distribution<double> uniform_r;
     static std::uniform_int_distribution<size_t> uniform_i(0, mutant_vec.size());
 
-    // Perform the crossover based on the target vector.
-    auto trial_vec(target_vec);
-    
     // Generate a random crossover starting position.
     auto pos = uniform_i(eng);
+
+    auto trial_vec(target_vec);
     for(auto i = 0UL; i < target_vec.size(); ++i) {
         trial_vec[pos] = mutant_vec[pos];
         pos = (pos + 1) % target_vec.size();
