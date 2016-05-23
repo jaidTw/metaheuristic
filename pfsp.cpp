@@ -71,10 +71,10 @@ int main(int argc, char** argv) {
     /////////////////////////////
     // Configure instance & MA //
     /////////////////////////////
-    
+
     // Configure instance
     auto EInstance = MH::Evolutionary::Instance<Permutation>();
-    EInstance.generationLimit = 700;
+    EInstance.generationLimit = 1000;
     EInstance.evaluate = PFSPMakespan;
     EInstance.mutate = PFSPShiftMutationPerSolution;
     EInstance.inf = reinterpret_cast<void *>(&timeTable);
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
     ///////////////////////////////////////////
     // Generate initial population using TS. //
     ///////////////////////////////////////////
-    
+
     // Configure instance for initial solution generating process.
     auto initInstance = MH::Trajectory::Instance<Permutation>();
     initInstance.generationLimit = 300;
@@ -163,7 +163,6 @@ int main(int argc, char** argv) {
         std::cout << result.score << " " << duration.count() / 1000.0 << " " << eval_count << std::endl;
     }
 #endif
-    
     return 0;
 }
 
@@ -221,7 +220,7 @@ std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation &perm) {
             neighbours[index].resize(perm.size());
             std::copy(perm.begin(), perm.end(), neighbours[index].begin());
             neighbours[index].insert(neighbours[index].begin() + j, neighbours[index][i]);
-            neighbours[index].erase(neighbours[index].begin() + i); 
+            neighbours[index].erase(neighbours[index].begin() + i);
             ++index;
         }
     }
@@ -230,7 +229,7 @@ std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation &perm) {
             neighbours[index].resize(perm.size());
             std::copy(perm.begin(), perm.end(), neighbours[index].begin());
             neighbours[index].insert(neighbours[index].end() - j, neighbours[index][perm.size() - i - 1]);
-            neighbours[index].erase(neighbours[index].end() - i - 1); 
+            neighbours[index].erase(neighbours[index].end() - i - 1);
             ++index;
         }
     }

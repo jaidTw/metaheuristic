@@ -206,7 +206,7 @@ MH::Trajectory::II<Policy>::select(Instance<Encoding> &instance,
 // SA selection: call select_SA and handle the cooling schedule.
 template <typename Encoding>
 inline MH::Solution<Encoding>&
-MH::Trajectory::SA::select(Instance<Encoding> &instance,
+MH::Trajectory::SA::select(Instance<Encoding> &,
                            Solution<Encoding> &current,
                            SolCollection<Encoding> &neighbours) {
     auto &result = selectHelper(current, neighbours);
