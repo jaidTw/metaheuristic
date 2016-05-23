@@ -211,7 +211,9 @@ MH::Evolutionary::Instance<Encoding>::evolution(Algorithm &algorithm, std::vecto
         MH::Evolutionary::generate(*this, population, algorithm);
 
 #ifdef EVOL_PLOT
-        std::cout << generationCount + 1 << " " << std::min_element(population.begin(), population.end())->score << std::endl;
+        if(generationCount % (generationLimit / 200) == 0) {
+            std::cout << generationCount + 1 << " " << std::min_element(population.begin(), population.end())->score << std::endl;
+        }
 #endif
 
     }
