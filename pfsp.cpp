@@ -26,12 +26,14 @@ void PFSPShiftMutationPerJob(Permutation&, double); // Terrible. Do not use.
 double PFSPMakespan(Permutation&, void*); // Naïve algorithm. A faster version should be written for evaluating neighbourhoods.
 Permutation PFSPConvert(Permutation &encoding, void *);
 
+static uint64_t eval_count = 0;
+
 int main(int argc, char** argv) {
     if(argc != 2) {
         std::cerr << "Usage: ./pfsp [test_data]" << std::endl;
         exit(-1);
     }
-    std::cout << "Opening " << argv[1] << "... ";
+    std::cerr << "Opening " << argv[1] << "... ";
 
     std::fstream file;
     try {
@@ -42,15 +44,15 @@ int main(int argc, char** argv) {
         std::cerr << "Please make sure the file name is valid and isn't in use." << std::endl;
         exit(-1);
     }
-    std::cout << "Success." << std::endl;
+    std::cerr << "Success." << std::endl;
 
-    std::cout << "Parsing data... ";
+    std::cerr << "Parsing data... ";
     auto timeTable = PFSPParseData(file);
     auto numMachines = timeTable.size();
     auto numJobs = timeTable.front().size();
-    std::cout << "Done." << std::endl;
-    std::cout << "Number of jobs: " << numJobs << std::endl;
-    std::cout << "Number of machines: " << numMachines << std::endl;
+    std::cerr << "Done." << std::endl;
+    std::cerr << "Number of jobs: " << numJobs << std::endl;
+    std::cerr << "Number of machines: " << numMachines << std::endl;
 
     ////////////////////////////////////////////////
     // Configure local search instance used by MA //
@@ -59,27 +61,12 @@ int main(int argc, char** argv) {
     // Configure instance
     auto TInstance = MH::Trajectory::Instance<Permutation>();
     TInstance.generationLimit = 300;
-    TInstance.neighbourhood = PFSPInsertionNeighbourhoodSmall;
+    TInstance.neighbourhood = PFSPSwapNeighbourhoodSmall;
     TInstance.evaluate = PFSPMakespan;
     TInstance.inf = reinterpret_cast<void *>(&timeTable);
 
     // Configure algorithm
-#ifdef USE_II_FI
-    auto II = MH::Trajectory::II<MH::Trajectory::II_FirstImproving>();
-#elif USE_II_BI
     auto II = MH::Trajectory::II<MH::Trajectory::II_BestImproving>();
-#elif USE_II_SC
-    auto II = MH::Trajectory::II<MH::Trajectory::II_Stochastic>();
-#elif USE_SA
-    auto SA = MH::Trajectory::SA();
-    SA.init_temperature = 10000;
-    SA.cooling = PFSPCooling;
-    SA.epoch_length = 20;
-#elif USE_TS
-    auto TS = MH::Trajectory::TabuSearch<Permutation, Permutation>();
-    TS.length = 70;
-    TS.trait = PFSPConvert;
-#endif
 
     /////////////////////////////
     // Configure instance & MA //
@@ -94,31 +81,10 @@ int main(int argc, char** argv) {
 
     // Configure MA
     auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament,
-#ifdef USE_OP
         MH::Evolutionary::OP,
-#elif UES_SJOX
-        MH::Evolutionary::SJOX,
-#endif // USE_OP
-#ifdef USE_II_FI
-        MH::Trajectory::II<MH::Trajectory::II_FirstImproving>,
-#elif USE_II_BI
         MH::Trajectory::II<MH::Trajectory::II_BestImproving>,
-#elif USE_II_SC
-        MH::Trajectory::II<MH::Trajectory::II_Stochastic>,
-#elif USE_SA
-        MH::Trajectory::SA,
-#elif USE_TS
-        MH::Trajectory::TS,
-#endif // USE_II_FI
-        MH::Trajectory::Instance<Permutation>>(100, numJobs,true,true,0.6,
-#if defined(USE_II_FI) || defined(USE_II_BI) || defined(USE_II_SC)
-            II,
-#elif USE_SA
-            SA,
-#elif USE_TS
-            TS,
-#endif // USE_SA
-            TInstance);
+        MH::Trajectory::Instance<Permutation>>
+            (100, numJobs, true, true, 0.6, II, TInstance);
     MA.selectionStrategy.size = 2;
 
     // random engine
@@ -131,7 +97,7 @@ int main(int argc, char** argv) {
     // Configure instance for initial solution generating process.
     auto initInstance = MH::Trajectory::Instance<Permutation>();
     initInstance.generationLimit = 300;
-    initInstance.neighbourhood = PFSPInsertionNeighbourhoodSmall;
+    initInstance.neighbourhood = PFSPSwapNeighbourhoodSmall;
     initInstance.evaluate = PFSPMakespan;
     initInstance.inf = reinterpret_cast<void *>(&timeTable);
 
@@ -140,8 +106,9 @@ int main(int argc, char** argv) {
     initTS.length = 70;
     initTS.trait = PFSPConvert;
 
-    auto start = Clock::now();
 
+#ifdef EVOL_PLOT
+    auto start = Clock::now();
     /////////////////////////////////
     // Generate initial population //
     /////////////////////////////////
@@ -152,20 +119,50 @@ int main(int argc, char** argv) {
         std::shuffle(sol.begin(), sol.end(), eng);
 
         // Use random init solution to run TS
-        sol = MH::Trajectory::search(initInstance, initTS, sol).encoding;
+        sol = initInstance.search(initTS, sol).encoding;
     }
 
     //////////////
     // Start MA //
     //////////////
 
-    auto result = MH::Evolutionary::evolution(EInstance, MA, init);
+    auto result = EInstance.evolution(MA, init);
 
-    std::cout << "\nFinal score: " << result.score << ".\n";
-    std::cout << "花費的時間：";
+    std::cerr << "\nFinal score : " << result.score << ".\n";
+    std::cerr << "Elpased Time : ";
     auto end = Clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
-    std::cout << duration.count() / 1000.0 << "秒。\n";
+    std::cerr << duration.count() / 1000.0 << "sec(s).\n";
+#else
+    for(int i = 0; i < 20; ++i) {
+        auto start = Clock::now();
+        /////////////////////////////////
+        // Generate initial population //
+        /////////////////////////////////
+        std::vector<Permutation> init(MA.offspring.size());
+        for(auto &sol : init) {
+            sol.resize(numJobs);
+            std::iota(sol.begin(), sol.end(), 1);
+            std::shuffle(sol.begin(), sol.end(), eng);
+    
+            // Use random init solution to run TS
+            sol = initInstance.search(initTS, sol).encoding;
+        }
+    
+        //////////////
+        // Start MA //
+        //////////////
+    
+        auto result = EInstance.evolution(MA, init);
+    
+        std::cerr << "\nFinal score : " << result.score << ".\n";
+        std::cerr << "Elpased Time : ";
+        auto end = Clock::now();
+        std::chrono::duration<double, std::milli> duration = end - start;
+        std::cerr << duration.count() / 1000.0 << "sec(s).\n";
+        std::cout << result.score << " " << duration.count() / 1000.0 << " " << eval_count << std::endl;
+    }
+#endif
     
     return 0;
 }
@@ -280,6 +277,7 @@ void PFSPShiftMutationPerJob(Permutation &perm, double mutationProbability) {
 }
 
 double PFSPMakespan(Permutation &perm, void *inf) {
+    ++eval_count;
     Table timeTable = *reinterpret_cast<Table *>(inf);
     auto numMachines = timeTable.size();
     auto numJobs = timeTable.front().size();
