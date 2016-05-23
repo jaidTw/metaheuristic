@@ -1,12 +1,10 @@
 C++ = g++
 CPPFLAGS = -march=corei7-avx -std=gnu++14 -Wall
-XOVER = -DUSE_OP
-TRAJ = -DUSE_SA
-POSTFIX = sa
 debug:
-	$(C++) $(CPPFLAGS) $(XOVER) $(TRAJ) -Wextra -Werror -g -O0 pfsp.cpp -o pfsp_$(POSTFIX)
+	$(C++) $(CPPFLAGS) -DEVOL_PLOT -Wextra -Wall -g -Og pfsp.cpp -o pfsp
 release:
-	$(C++) $(CPPFLAGS) $(XOVER) $(TRAJ) -O3 pfsp.cpp -o pfsp_$(POSTFIX)
+	$(C++) $(CPPFLAGS) -DEVOL_PLOT -O3 pfsp.cpp -o pfsp
 fast:
-	$(C++) $(CPPFLAGS) $(XOVER) $(TRAJ) -Ofast pfsp.cpp -o pfsp_$(POSTFIX)
-
+	$(C++) $(CPPFLAGS) -Ofast pfsp.cpp -o pfsp
+fastp:
+	$(C++) $(CPPFLAGS) -DEVOL_PLOT -Ofast pfsp.cpp -o pfsp
