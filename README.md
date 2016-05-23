@@ -2,11 +2,6 @@
 
 ##Trajectory Algorithms:
 
-###呼叫
-```
-MH::Trajectory::search(instance, algortihm, init_solution);
-```
-
 ###建立Instance：
 ```
 auto instance = MH::Trajectory::Instance<Encoding>();
@@ -43,7 +38,7 @@ auto SA = MH::Trajectory::SA();
 
 TS :
 ```
-auto SA = MH::Trajectory::TS<Encoding, TraitType>();
+auto TS = MH::Trajectory::TS<Encoding, TraitType>();
 ```
 或使用別名`MH::Trajectory::TabuSearch`
 * `Encoding`是解編碼的型別。
@@ -62,18 +57,18 @@ SA :
  * `double (*cooling)(double);`
 
 TS :
-* `TS.length` : 禁忌列表長度。
+* `TS.length` : 禁忌列表長度(tabu tenure)。
  * `uint8_t length;`
 * `TS.trait` : 特徵轉換函式。
  * `TraitType (*trait)(Encoding&, void *);`
  * 注意第二個參數為`instance.inf`
 
-## Evolutioanry Algorithms
-
 ###呼叫
 ```
-MH::Evolutionary::evolution(instance, algorithm, init_solution)
+instance.search(algortihm, init_solution);
 ```
+
+## Evolutioanry Algorithms
 
 ###建立Instance
 ```
@@ -119,7 +114,12 @@ DE :
  * `double scaling_factor;`
 * `DE.num_of_diff_vectors` : 產生的mutant vector數量。
  * `uint8_t num_of_diff_vectors;`
+ * 
+###呼叫
+```
+instance.evolution(algorithm, init_solution)
+```
 
-###其他
+##其他
 關於Encoding:
 必須提供`operator==()`的重載版本。

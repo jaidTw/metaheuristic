@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <valarray>
 #include <iostream>
+#include <tuple>
 
 namespace MH {
     namespace Evolutionary {
@@ -132,7 +133,6 @@ namespace MH {
         template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
         struct MA {
             void initialise(Instance<Encoding> &, std::vector<Encoding> &);
-            MA(size_t, size_t, bool, bool, double, LocalSearch &, LSInstance &);
             bool _offspringAreParents;
             bool elitism;
             bool removeDuplicates;
@@ -140,8 +140,8 @@ namespace MH {
             LocalSearch localSearch;
             LSInstance lsInstance;
             SolCollection<Encoding> offspring;
-            Selection selectionStrategy;
-            Crossover crossoverStrategy;
+            Selection selectionPolicy;
+            Crossover crossoverPolicy;
         };
 
 
@@ -176,19 +176,23 @@ namespace MH {
         void generate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, MAArgs...> &);
 
         template <typename Encoding, typename... MAArgs>
-        inline void mate(Instance<Encoding> &instance, SolCollection<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, MA<Encoding, MAArgs...> &);
+        inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
+        mate(Instance<Encoding> &, SolCollection<Encoding> &, MA<Encoding, MAArgs...> &);
 
         template <typename Encoding>
         inline size_t mateSelect(SolCollection<Encoding> &, Tournament &);
 
         template <typename Encoding>
-        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, OP &);
+        inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
+        crossover(Instance<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, OP &);
 
         template <typename Encoding>
-        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, OX &);
+        inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
+        crossover(Instance<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, OX &);
 
         template <typename Encoding>
-        inline void crossover(Instance<Encoding> &instance, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, PMX &);
+        inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
+        crossover(Instance<Encoding> &, Solution<Encoding> &, Solution<Encoding> &, double, PMX &);
 
         template <typename FP>
         double _DE_EVALUATE_WRAPPER(std::valarray<FP> &, void *);
@@ -202,16 +206,17 @@ MH::Evolutionary::Instance<Encoding>::evolution(Algorithm &algorithm, std::vecto
 
     algorithm.initialise(*this, init);
     auto population = MH::Evolutionary::initialisePopulation(*this, init);
-    for(auto generationCount = 0UL; generationCount < generationLimit; ++generationCount) {
 
+    for(auto generationCount = 0UL; generationCount < generationLimit; ++generationCount) {
         MH::Evolutionary::generate(*this, population, algorithm);
+
 #ifdef EVOL_PLOT
         std::cout << generationCount + 1 << " " << std::min_element(population.begin(), population.end())->score << std::endl;
 #endif
+
     }
     auto min = *std::min_element(population.begin(), population.end());
     return min;
-
 }
 
 
@@ -246,21 +251,6 @@ MH::Evolutionary::Instance<Encoding>::evolution(Algorithm &de, std::vector<Encod
     return Solution<std::vector<FP>>(vec_result, result.score);
 }
 
-
-template <typename Encoding, typename Selection, typename Crossover, typename LocalSearch, typename LSInstance>
-MH::Evolutionary::MA<Encoding, Selection, Crossover, LocalSearch, LSInstance>::MA
-    (size_t thePopulationSize, size_t theNumJobs, bool theElitism, bool theRemoveDuplicates,
-     double theMutationProbability, LocalSearch &theLocalSearch, LSInstance &theLSInstance)
-    : _offspringAreParents(false), elitism(theElitism), removeDuplicates(theRemoveDuplicates),
-        mutationProbability(theMutationProbability), localSearch(theLocalSearch),
-        lsInstance(theLSInstance) {
-    offspring.resize(thePopulationSize);
-    for(auto &elem : offspring) {
-        elem.encoding.resize(theNumJobs);
-    }
-}
-
-
 template <typename S, typename C> template <typename Encoding>
 inline void
 MH::Evolutionary::DE<S, C>::initialise(Instance<Encoding> &, std::vector<Encoding> &) {
@@ -268,13 +258,19 @@ MH::Evolutionary::DE<S, C>::initialise(Instance<Encoding> &, std::vector<Encodin
 
 template <typename Encoding, typename S, typename C, typename LSA, typename LSI>
 inline void
-MH::Evolutionary::MA<Encoding, S, C, LSA, LSI>::initialise(Instance<Encoding> &, std::vector<Encoding> &) {
+MH::Evolutionary::MA<Encoding, S, C, LSA, LSI>::initialise(Instance<Encoding> &, std::vector<Encoding> &init) {
+    _offspringAreParents = false;
+
+    offspring.resize(init.size());
+    for(auto &elem : offspring) {
+        elem.encoding.resize(init.front().size());
+    }
 }
 
 template <typename Encoding>
 inline MH::SolCollection<Encoding>
-MH::Evolutionary::initialisePopulation(MH::Evolutionary::Instance<Encoding> &instance,
-                                       std::vector<Encoding> &init) {
+MH::Evolutionary::initialisePopulation(Instance<Encoding> &instance, std::vector<Encoding> &init) {
+
     MH::SolCollection<Encoding> population(init.size());
     std::transform(init.begin(), init.end(), population.begin(),
                    [&](auto &s) {
@@ -285,16 +281,19 @@ MH::Evolutionary::initialisePopulation(MH::Evolutionary::Instance<Encoding> &ins
 
 template <typename Encoding, typename... MAArgs>
 inline void
-MH::Evolutionary::generate(Instance<Encoding> &instance,
-                           MH::SolCollection<Encoding> &population,
-                           MH::Evolutionary::MA<Encoding, MAArgs...> &ma) {
+MH::Evolutionary::generate(Instance<Encoding> &instance, SolCollection<Encoding> &population, MA<Encoding, MAArgs...> &ma) {
+
     auto &thePopulation = (ma._offspringAreParents) ? ma.offspring : population;
     auto &theOffspring = (ma._offspringAreParents) ? population : ma.offspring;
+
     for(size_t i = 0; i < population.size(); i += 2) {
-        MH::Evolutionary::mate(instance, thePopulation, theOffspring[i], theOffspring[i + 1], ma);
+        Solution<Encoding> offspring1, offspring2;
+
+        std::tie(offspring1, offspring2) = MH::Evolutionary::mate(instance, thePopulation, ma);
+
         // local search
-        theOffspring[i] = ma.lsInstance.search(ma.localSearch, theOffspring[i].encoding);
-        theOffspring[i + 1] = ma.lsInstance.search(ma.localSearch, theOffspring[i + 1].encoding);
+        theOffspring[i] = ma.lsInstance.search(ma.localSearch, offspring1.encoding);
+        theOffspring[i + 1] = ma.lsInstance.search(ma.localSearch, offspring2.encoding);
     }
 
     // elitism
@@ -314,24 +313,22 @@ MH::Evolutionary::generate(Instance<Encoding> &instance,
 }
 
 template <typename Encoding, typename... MAArgs>
-inline void
-MH::Evolutionary::mate(Instance<Encoding> &instance,
-                       MH::SolCollection<Encoding> &population,
-                       MH::Solution<Encoding> &offspring1,
-                       MH::Solution<Encoding> &offspring2,
-                       MH::Evolutionary::MA<Encoding, MAArgs...> &ma) {
-    auto parent1 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
-    auto parent2 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
+inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
+MH::Evolutionary::mate(Instance<Encoding> &instance, SolCollection<Encoding> &population, MA<Encoding, MAArgs...> &ma) {
+
+    auto parent1 = MH::Evolutionary::mateSelect(population, ma.selectionPolicy);
+    auto parent2 = MH::Evolutionary::mateSelect(population, ma.selectionPolicy);
+
     while(parent2 == parent1) {
-        parent2 = MH::Evolutionary::mateSelect(population, ma.selectionStrategy);
+        parent2 = MH::Evolutionary::mateSelect(population, ma.selectionPolicy);
     }
-    MH::Evolutionary::crossover(instance, population[parent1], population[parent2], offspring1, offspring2, ma.mutationProbability, ma.crossoverStrategy);
+    return MH::Evolutionary::crossover(instance, population[parent1], population[parent2], ma.mutationProbability, ma.crossoverPolicy);
 }
 
 template <typename Encoding>
 inline size_t
-MH::Evolutionary::mateSelect(MH::SolCollection<Encoding> &population,
-                             MH::Evolutionary::Tournament &tournament) {
+MH::Evolutionary::mateSelect(SolCollection<Encoding> &population,
+                             Tournament &tournament) {
     // random number generator
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
     
@@ -339,6 +336,7 @@ MH::Evolutionary::mateSelect(MH::SolCollection<Encoding> &population,
     for(size_t i = 0; i < tournament.size; ++i) {
         contestants.push_back(eng() % population.size());
     }
+
     size_t winner = 0;
     for(size_t i = 1; i < contestants.size(); ++i) {
         if(population[contestants[i]] < population[contestants[winner]]) {
@@ -351,16 +349,17 @@ MH::Evolutionary::mateSelect(MH::SolCollection<Encoding> &population,
 
 // OP: encoding is limited to job indices.
 template <typename Encoding>
-inline void
+inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
 MH::Evolutionary::crossover(Instance<Encoding> &instance,
-                            MH::Solution<Encoding> &parent1,
-                            MH::Solution<Encoding> &parent2,
-                            MH::Solution<Encoding> &offspring1,
-                            MH::Solution<Encoding> &offspring2,
+                            Solution<Encoding> &parent1,
+                            Solution<Encoding> &parent2,
                             double mutationProbability,
-                            MH::Evolutionary::OP &) {
+                            Evolutionary::OP &) {
     // random number generator
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+
+    auto offspring1(parent1);
+    auto offspring2(parent2);
 
     size_t size = parent1.encoding.size();
     std::vector<bool> knockout1(size, false), knockout2(size, false);
@@ -381,20 +380,22 @@ MH::Evolutionary::crossover(Instance<Encoding> &instance,
     instance.mutate(offspring2.encoding, mutationProbability);
     offspring1.score = instance.evaluate(offspring1.encoding, instance.inf);
     offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
+    return std::tie(offspring1, offspring2);
 }
 
 // OX: encoding is limited to job indices.
 template <typename Encoding>
-inline void
+inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
 MH::Evolutionary::crossover(Instance<Encoding> &instance,
-                            MH::Solution<Encoding> &parent1,
-                            MH::Solution<Encoding> &parent2,
-                            MH::Solution<Encoding> &offspring1,
-                            MH::Solution<Encoding> &offspring2,
+                            Solution<Encoding> &parent1,
+                            Solution<Encoding> &parent2,
                             double mutationProbability,
-                            MH::Evolutionary::OX &) {
+                            Evolutionary::OX &) {
     // random number generator
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
+
+    auto offspring1(parent1);
+    auto offspring2(parent2);
 
     size_t size = parent1.encoding.size();
     std::vector<bool> knockout1(size, false), knockout2(size, false);
@@ -426,6 +427,7 @@ MH::Evolutionary::crossover(Instance<Encoding> &instance,
     instance.mutate(offspring2.encoding, mutationProbability);
     offspring1.score = instance.evaluate(offspring1.encoding, instance.inf);
     offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
+    return std::tie(offspring1, offspring2);
 }
 
 // PMX: encoding is limited to job indices.
@@ -453,21 +455,25 @@ size_t PMXHelper(MH::Solution<Encoding> &parent1,
 }
 
 template <typename Encoding>
-inline void
+inline std::tuple<MH::Solution<Encoding>, MH::Solution<Encoding>>
 MH::Evolutionary::crossover(Instance<Encoding> &instance,
-                            MH::Solution<Encoding> &parent1,
-                            MH::Solution<Encoding> &parent2,
-                            MH::Solution<Encoding> &offspring1,
-                            MH::Solution<Encoding> &offspring2,
+                            Solution<Encoding> &parent1,
+                            Solution<Encoding> &parent2,
                             double mutationProbability,
-                            MH::Evolutionary::PMX &) {
+                            Evolutionary::PMX &) {
     // random number generator
     static std::minstd_rand eng(std::chrono::system_clock::now().time_since_epoch().count());
 
+    auto offspring1(parent1);
+    auto offspring2(parent2);
+
     size_t size = parent1.encoding.size();
+
     std::vector<bool> knockout1(size, false), knockout2(size, false);
+
     std::fill(offspring1.encoding.begin(), offspring1.encoding.end(), 0);
     std::fill(offspring2.encoding.begin(), offspring2.encoding.end(), 0);
+
     size_t crossoverPointA = eng() % (size - 1);
     size_t crossoverPointB = eng() % (size - crossoverPointA - 1) + crossoverPointA + 1;
     for(size_t i = crossoverPointA; i < crossoverPointB; ++i) {
@@ -498,6 +504,7 @@ MH::Evolutionary::crossover(Instance<Encoding> &instance,
     instance.mutate(offspring2.encoding, mutationProbability);
     offspring1.score = instance.evaluate(offspring1.encoding, instance.inf);
     offspring2.score = instance.evaluate(offspring2.encoding, instance.inf);
+    return std::tie(offspring1, offspring2);
 }
 
 template <typename Encoding, typename... DEArgs>

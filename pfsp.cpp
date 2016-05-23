@@ -18,11 +18,14 @@ typedef std::vector<std::vector<uint16_t>> Table;
 typedef std::chrono::high_resolution_clock Clock;
 
 Table PFSPParseData(std::fstream&);
+
 std::vector<Permutation> PFSPInsertionNeighbourhoodSmall(Permutation&); // Supposedly preferable to swap.
 std::vector<Permutation> PFSPInsertionNeighbourhood(Permutation&); // Slow.
 std::vector<Permutation> PFSPSwapNeighbourhoodSmall(Permutation&);
+
 void PFSPShiftMutationPerSolution(Permutation&, double);
 void PFSPShiftMutationPerJob(Permutation&, double); // Terrible. Do not use.
+
 double PFSPMakespan(Permutation&, void*); // Naïve algorithm. A faster version should be written for evaluating neighbourhoods.
 Permutation PFSPConvert(Permutation &encoding, void *);
 
@@ -54,6 +57,9 @@ int main(int argc, char** argv) {
     std::cerr << "Number of jobs: " << numJobs << std::endl;
     std::cerr << "Number of machines: " << numMachines << std::endl;
 
+    // random engine
+    std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+
     ////////////////////////////////////////////////
     // Configure local search instance used by MA //
     ////////////////////////////////////////////////
@@ -80,15 +86,17 @@ int main(int argc, char** argv) {
     EInstance.inf = reinterpret_cast<void *>(&timeTable);
 
     // Configure MA
-    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation, MH::Evolutionary::Tournament,
-        MH::Evolutionary::OP,
-        MH::Trajectory::II<MH::Trajectory::II_BestImproving>,
-        MH::Trajectory::Instance<Permutation>>
-            (100, numJobs, true, true, 0.6, II, TInstance);
-    MA.selectionStrategy.size = 2;
-
-    // random engine
-    std::default_random_engine eng(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    auto MA = MH::Evolutionary::MemeticAlgorithm<Permutation,
+                                                 MH::Evolutionary::Tournament,
+                                                 MH::Evolutionary::OP,
+                                                 MH::Trajectory::II<MH::Trajectory::II_BestImproving>,
+                                                 MH::Trajectory::Instance<Permutation>>();
+    MA.elitism = true;
+    MA.removeDuplicates = true;
+    MA.mutationProbability = 0.6;
+    MA.localSearch = II;
+    MA.lsInstance = TInstance;
+    MA.selectionPolicy.size = 2;
 
     ///////////////////////////////////////////
     // Generate initial population using TS. //
@@ -112,12 +120,11 @@ int main(int argc, char** argv) {
     /////////////////////////////////
     // Generate initial population //
     /////////////////////////////////
-    std::vector<Permutation> init(MA.offspring.size());
+    std::vector<Permutation> init(100);
     for(auto &sol : init) {
         sol.resize(numJobs);
         std::iota(sol.begin(), sol.end(), 1);
         std::shuffle(sol.begin(), sol.end(), eng);
-
         // Use random init solution to run TS
         sol = initInstance.search(initTS, sol).encoding;
     }
@@ -139,7 +146,7 @@ int main(int argc, char** argv) {
         /////////////////////////////////
         // Generate initial population //
         /////////////////////////////////
-        std::vector<Permutation> init(MA.offspring.size());
+        std::vector<Permutation> init(100);
         for(auto &sol : init) {
             sol.resize(numJobs);
             std::iota(sol.begin(), sol.end(), 1);
