@@ -2,15 +2,15 @@
 
 This is a simple metaheuristic library design for class
 
-##Trajectory Algorithms:
+## Trajectory Algorithms:
 
-###Crease Instance：
+### Crease Instance：
 ```
 auto instance = MH::Trajectory::Instance<Encoding>();
 ```
 * `Encoding` is the type of the encoded solution.
 
-###Configure Instance：
+### Configure Instance：
 * `instance.generationLimit` : Limit of search generations.
  * prototype `uint64_t generationLimit;`
 * `instance.neighborhood` : neighbourhood generator.
@@ -20,8 +20,8 @@ auto instance = MH::Trajectory::Instance<Encoding>();
 * `instance.inf` : additional information provide to evaluator.
  * prototype `void *inf;`
 
-###Create algorithm：
-II :
+### Create algorithm：
+ItrativeImprovement (II) :
 ```
 auto II = MH::Trajectory::II<SelectionStrategy>();
 ```
@@ -31,13 +31,13 @@ or use the alias`MH::Trajectory::ItrativeImprovement`
  * `MH::Trajectory::II_BestImproving`
  * `MH::Trajecotry::II_FirstImproving`
 
-SA :
+Simulated Annealing (SA) :
 ```
 auto SA = MH::Trajectory::SA();
 ```
 or use the alias`MH::Trajectory::SimulatedAnnealing`
 
-TS :
+TabuSearch (TS) :
 ```
 auto TS = MH::Trajectory::TS<Encoding, TraitType>();
 ```
@@ -45,7 +45,7 @@ or use the alias`MH::Trajectory::TabuSearch`
 * `Encoding` is the type of the encoded solution.
 * `TraitType`is the type of the trait that will be stored in the tabu list.
 
-###Configure Algorithm
+### Configure Algorithm
 II :
 None
 
@@ -64,20 +64,20 @@ TS :
  * `TraitType (*trait)(Encoding&, void *);`
  * The second parameter is `instance.inf`
 
-###Call
+### Call
 ```
 instance.search(algortihm, init_solution);
 ```
 
 ## Evolutioanry Algorithms
 
-###Create Instance
+### Create Instance
 ```
 auto instance = MH::Evolutionary::Instance<Encoding>();
 ```
 * `Encoding` is the type of the encoded solution.
 
-###Configure Instance：
+### Configure Instance：
 * `instance.generationLimit` : limit of search generation。
  * prototype `uint64_t generationLimit;`
 * `instance.neighborhood` : neighbourhood generator.
@@ -87,8 +87,8 @@ auto instance = MH::Evolutionary::Instance<Encoding>();
 * `instance.inf` : additional information provide to evaluator.
  * `void *inf;`
 
-###Create algorithm：
-DE :
+### Create algorithm：
+Differential Evolution(DE) :
 ```
 auto DE = MH::Evolutionary::DE<Selection, Crossover>();
 ```
@@ -103,7 +103,7 @@ or use the alias `MH::Evolutionary::DifferentialEvolution`
  * `MH::Evolutionary::DE_Binomial`
  * `MH::Evolutionary::DE_Exponential`
 
-###Configure algorithm
+### Configure algorithm
 DE :
 * `DE.crossover_rate` : crossover rate, should be in the interval (0, 1].
  * `double crossover_rate;` 
@@ -115,11 +115,11 @@ DE :
 * `DE.num_of_diff_vectors` : the number of mutant vectors to be generated。
  * `uint8_t num_of_diff_vectors;`
  * 
-###Call
+### Call
 ```
 instance.evolution(algorithm, init_solution)
 ```
 
-##Others
+## Others
 About Encoding:
 should provide the `operator==()`.
